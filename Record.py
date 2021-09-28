@@ -16,6 +16,8 @@ UP_BOUND = 70
 recording = False
 interrupted = False
 plotting = False
+candidate_index = 0
+current_record_num = 0
 
 # left_bound = 184
 # up_bound = 104
@@ -25,15 +27,14 @@ frame_series = []
 
 
 def wait_for_enter():
-    global recording, interrupted, plotting
-    candidate_index = 0
+    global recording, interrupted, plotting, candidate_index, current_record_num
     while True:
         try:
             if (recording):
                 code = input('Press Enter to stop...')
                 recording = False
                 plotting = True
-                candidate_index += 1
+                # candidate_index += 1
                 if (code == 'q'):
                     interrupted = True
                     break
@@ -44,6 +45,11 @@ def wait_for_enter():
                 if (code == 'q'):
                     interrupted = True
                     break
+                elif (code == 'c'):
+                    if (candidate_index < 26):
+                        candidate_index += 1
+                        current_record_num = 0
+                    continue
         except:
             interrupted = True
             break
@@ -141,14 +147,15 @@ if __name__ == '__main__':
         u = threading.Thread(target=scan_frames, args=(frame, info))
         u.setDaemon(True)
         u.start()
-        candidate_index = 0
+        
         while not interrupted:
             if plotting:
                 # plot_frame()
                 np.save(
-                    "alphabet_data/" + candidates[candidate_index] + ".npy",
+                    "alphabet_data/" + candidates[candidate_index] + "_" + str(current_record_num) + ".npy",
                     frame_series)
-                candidate_index += 1
+                frame_series = []
+                current_record_num += 1
                 plotting = False
             if (candidate_index >= len(candidates)):
                 break
