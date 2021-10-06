@@ -78,7 +78,7 @@ def scan_frames(frame, info: sensel.SenselSensorInfo):
         for i in range(num_frames):
             error = sensel.getFrame(handle, frame)
             if recording:
-                save_frame(frame, info)
+                print_sum_frame(frame, info)
 
 
 def print_bound_frame(frame, info: sensel.SenselSensorInfo):
@@ -109,6 +109,14 @@ def print_max_frame(frame, info: sensel.SenselSensorInfo):
             #     up_bound = min(up_bound, i)
     sum_frame[max_point[0]][max_point[1]] += 1.0
 
+def print_sum_frame(frame, info: sensel.SenselSensorInfo):
+    global sum_frame
+    rows = info.num_rows
+    cols = info.num_cols
+    for i in range(UP_BOUND, info.num_rows):
+        for j in range(LEFT_BOUND, info.num_cols):
+            sum_frame[i][j] += frame.force_array[i * cols + j]
+
 
 def save_frame(frame, info: sensel.SenselSensorInfo):
     global frame_series
@@ -123,7 +131,7 @@ def save_frame(frame, info: sensel.SenselSensorInfo):
 
 def plot_frame():
     global sum_frame
-    plt.imshow(sum_frame, cmap=plt.cm.hot, vmin=0, vmax=1)
+    plt.imshow(sum_frame, cmap=plt.cm.hot, vmin=0, vmax=4000)
     plt.colorbar()
     plt.show()
     sum_frame = np.zeros((HEIGHT, WIDTH))
@@ -150,11 +158,11 @@ if __name__ == '__main__':
         
         while not interrupted:
             if plotting:
-                # plot_frame()
-                np.save(
-                    "alphabet_data/" + candidates[candidate_index] + "_" + str(current_record_num) + ".npy",
-                    frame_series)
-                frame_series = []
+                plot_frame()
+                # np.save(
+                #     "alphabet_data/" + candidates[candidate_index] + "_" + str(current_record_num) + ".npy",
+                #     frame_series)
+                # frame_series = []
                 current_record_num += 1
                 plotting = False
             if (candidate_index >= len(candidates)):
