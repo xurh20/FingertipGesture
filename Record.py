@@ -6,6 +6,8 @@ import sensel
 import numpy as np
 import matplotlib.pyplot as plt
 
+import argparse
+
 candidates = [chr(y) for y in range(97, 123)]
 
 HEIGHT = 105
@@ -28,6 +30,8 @@ down_bound = 0
 
 sum_frame = np.zeros((HEIGHT, WIDTH))
 frame_series = []
+
+frame_operator = lambda x: None
 
 
 def wait_for_enter():
@@ -82,7 +86,7 @@ def scan_frames(frame, info: sensel.SenselSensorInfo):
         for i in range(num_frames):
             error = sensel.getFrame(handle, frame)
             if recording:
-                save_frame(frame, info)
+                frame_operator(frame, info)
 
 
 def print_bound_frame(frame, info: sensel.SenselSensorInfo):
@@ -104,8 +108,8 @@ def print_max_frame(frame, info: sensel.SenselSensorInfo):
     cols = info.num_cols
     max_point = (0, 0)
     max_pressure = -1.0
-    for i in range(UP_BOUND, DOWN_BOUND+1):
-        for j in range(LEFT_BOUND, RIGHT_BOUND+1):
+    for i in range(UP_BOUND, DOWN_BOUND + 1):
+        for j in range(LEFT_BOUND, RIGHT_BOUND + 1):
             # sum_frame[i][j] += frame.force_array[i * cols + j]
             if (frame.force_array[i * cols + j] > max_pressure):
                 max_pressure = frame.force_array[i * cols + j]
@@ -115,12 +119,13 @@ def print_max_frame(frame, info: sensel.SenselSensorInfo):
             #     up_bound = min(up_bound, i)
     sum_frame[max_point[0]][max_point[1]] += 1.0
 
+
 def print_sum_frame(frame, info: sensel.SenselSensorInfo):
     global sum_frame
     rows = info.num_rows
     cols = info.num_cols
-    for i in range(UP_BOUND, DOWN_BOUND+1):
-        for j in range(LEFT_BOUND, RIGHT_BOUND+1):
+    for i in range(UP_BOUND, DOWN_BOUND + 1):
+        for j in range(LEFT_BOUND, RIGHT_BOUND + 1):
             sum_frame[i][j] += frame.force_array[i * cols + j]
 
 
@@ -128,9 +133,9 @@ def save_frame(frame, info: sensel.SenselSensorInfo):
     global frame_series
     rows = info.num_rows
     cols = info.num_cols
-    fs = np.zeros((DOWN_BOUND+1 - UP_BOUND, RIGHT_BOUND+1 - LEFT_BOUND))
-    for i in range(UP_BOUND, DOWN_BOUND+1):
-        for j in range(LEFT_BOUND, RIGHT_BOUND+1):
+    fs = np.zeros((DOWN_BOUND + 1 - UP_BOUND, RIGHT_BOUND + 1 - LEFT_BOUND))
+    for i in range(UP_BOUND, DOWN_BOUND + 1):
+        for j in range(LEFT_BOUND, RIGHT_BOUND + 1):
             fs[i - UP_BOUND][j - LEFT_BOUND] += frame.force_array[i * cols + j]
     frame_series.append(fs)
 
@@ -150,6 +155,33 @@ def close_sensel(frame):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-b",
+                        "--bound",
+                        action="store_true",
+                        help="print record bounds")
+    parser.add_argument("-m",
+                        "--max",
+                        action="store_true",
+                        help="print sum of max points of each frame")
+    parser.add_argument("-r",
+                        "--record",
+                        action="store_true",
+                        help="record frames")
+    parser.add_argument("-s",
+                        "--sum",
+                        action="store_true",
+                        help="print sum of each frames")
+    args = parser.parse_args()
+    if args.bound:
+        frame_operator = print_bound_frame
+    elif args.max:
+        frame_operator = print_max_frame
+    elif args.record:
+        frame_operator = save_frame
+    elif args.sum:
+        frame_operator = print_sum_frame
+
     handle = open_sensel()
     if handle:
         error, info = sensel.getSensorInfo(handle)
@@ -161,14 +193,20 @@ if __name__ == '__main__':
         u = threading.Thread(target=scan_frames, args=(frame, info))
         u.setDaemon(True)
         u.start()
-        
+
         while not interrupted:
             if plotting:
-                # plot_frame()
-                # print(left_bound, right_bound, up_bound, down_bound)
-                np.save(
-                    "alphabet_data/" + candidates[candidate_index] + "_" + str(current_record_num) + ".npy",
-                    frame_series)
+                if args.bound:
+                    print(left_bound, right_bound, up_bound, down_bound)
+                elif args.max:
+                    plot_frame()
+                elif args.record:
+                    np.save(
+                        "alphabet_data/" + candidates[candidate_index] + "_" +
+                        str(current_record_num) + ".npy", frame_series)
+                elif args.sum:
+                    plot_frame()
+
                 frame_series = []
                 current_record_num += 1
                 plotting = False

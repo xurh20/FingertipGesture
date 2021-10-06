@@ -13,7 +13,24 @@ The Sensel API allows users to communicate with Sensel devices.
 [Sensel Decompress Lib Documentation](http://guide.sensel.com/sensel_decompress_h/)
 
 ## Get Stated
-```
+
+### Examples
+
+```cmd
 cd sensel-examples/sensel-python/
 python example_4_forces_control.py
 ```
+
+### FingertipGestureApp
+
+```cmd
+python Record.py [-b|m|r|s]
+```
+
+| Arguments | Description |
+| --------- | ----------- |
+| -b, --bound | print bound parameters |
+| -m, -max | print max frames |
+| -r, -record | save frames |
+| -s, -sum | print sum frames |
+Or run `python Record.py -h` for help.
