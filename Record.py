@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 
 import argparse
 
+from keras.models import load_model
+
 candidates = [chr(y) for y in range(97, 123)]
 
 HEIGHT = 105
@@ -164,6 +166,10 @@ if __name__ == '__main__':
                         "--max",
                         action="store_true",
                         help="print sum of max points of each frame")
+    parser.add_argument("-p",
+                        "--predict",
+                        action="store_true",
+                        help="print predicted input")
     parser.add_argument("-r",
                         "--record",
                         action="store_true",
@@ -172,15 +178,20 @@ if __name__ == '__main__':
                         "--sum",
                         action="store_true",
                         help="print sum of each frames")
+
     args = parser.parse_args()
     if args.bound:
         frame_operator = print_bound_frame
     elif args.max:
         frame_operator = print_max_frame
+    elif args.predict:
+        frame_operator = save_frame
     elif args.record:
         frame_operator = save_frame
     elif args.sum:
         frame_operator = print_sum_frame
+
+    model = load_model('deal-with-data/model/lstm_model_weights.h5')
 
     handle = open_sensel()
     if handle:
@@ -200,6 +211,8 @@ if __name__ == '__main__':
                     print(left_bound, right_bound, up_bound, down_bound)
                 elif args.max:
                     plot_frame()
+                elif args.predict:
+                    print(model.predict(np.array(frame_series)))
                 elif args.record:
                     np.save(
                         "alphabet_data/" + candidates[candidate_index] + "_" +
