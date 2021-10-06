@@ -10,8 +10,10 @@ candidates = [chr(y) for y in range(97, 123)]
 
 HEIGHT = 105
 WIDTH = 185
-LEFT_BOUND = 160
-UP_BOUND = 70
+LEFT_BOUND = 79
+UP_BOUND = 34
+RIGHT_BOUND = 106
+DOWN_BOUND = 68
 
 recording = False
 interrupted = False
@@ -19,8 +21,10 @@ plotting = False
 candidate_index = 0
 current_record_num = 0
 
-# left_bound = 184
-# up_bound = 104
+left_bound = 184
+up_bound = 104
+right_bound = 0
+down_bound = 0
 
 sum_frame = np.zeros((HEIGHT, WIDTH))
 frame_series = []
@@ -78,18 +82,20 @@ def scan_frames(frame, info: sensel.SenselSensorInfo):
         for i in range(num_frames):
             error = sensel.getFrame(handle, frame)
             if recording:
-                print_sum_frame(frame, info)
+                save_frame(frame, info)
 
 
 def print_bound_frame(frame, info: sensel.SenselSensorInfo):
-    # global left_bound, up_bound
+    global left_bound, up_bound, right_bound, down_bound
     rows = info.num_rows
     cols = info.num_cols
-    for i in range(UP_BOUND, info.num_rows):
-        for j in range(LEFT_BOUND, info.num_cols):
-            if (frame.force_array[i * cols + j] > 0.0):
+    for i in range(0, info.num_rows):
+        for j in range(0, info.num_cols):
+            if (frame.force_array[i * cols + j] > 0.1):
                 left_bound = min(left_bound, j)
                 up_bound = min(up_bound, i)
+                right_bound = max(right_bound, j)
+                down_bound = max(down_bound, i)
 
 
 def print_max_frame(frame, info: sensel.SenselSensorInfo):
@@ -98,8 +104,8 @@ def print_max_frame(frame, info: sensel.SenselSensorInfo):
     cols = info.num_cols
     max_point = (0, 0)
     max_pressure = -1.0
-    for i in range(UP_BOUND, info.num_rows):
-        for j in range(LEFT_BOUND, info.num_cols):
+    for i in range(UP_BOUND, DOWN_BOUND+1):
+        for j in range(LEFT_BOUND, RIGHT_BOUND+1):
             # sum_frame[i][j] += frame.force_array[i * cols + j]
             if (frame.force_array[i * cols + j] > max_pressure):
                 max_pressure = frame.force_array[i * cols + j]
@@ -113,8 +119,8 @@ def print_sum_frame(frame, info: sensel.SenselSensorInfo):
     global sum_frame
     rows = info.num_rows
     cols = info.num_cols
-    for i in range(UP_BOUND, info.num_rows):
-        for j in range(LEFT_BOUND, info.num_cols):
+    for i in range(UP_BOUND, DOWN_BOUND+1):
+        for j in range(LEFT_BOUND, RIGHT_BOUND+1):
             sum_frame[i][j] += frame.force_array[i * cols + j]
 
 
@@ -122,16 +128,16 @@ def save_frame(frame, info: sensel.SenselSensorInfo):
     global frame_series
     rows = info.num_rows
     cols = info.num_cols
-    fs = np.zeros((rows - UP_BOUND, cols - LEFT_BOUND))
-    for i in range(UP_BOUND, info.num_rows):
-        for j in range(LEFT_BOUND, info.num_cols):
+    fs = np.zeros((DOWN_BOUND+1 - UP_BOUND, RIGHT_BOUND+1 - LEFT_BOUND))
+    for i in range(UP_BOUND, DOWN_BOUND+1):
+        for j in range(LEFT_BOUND, RIGHT_BOUND+1):
             fs[i - UP_BOUND][j - LEFT_BOUND] += frame.force_array[i * cols + j]
     frame_series.append(fs)
 
 
 def plot_frame():
     global sum_frame
-    plt.imshow(sum_frame, cmap=plt.cm.hot, vmin=0, vmax=4000)
+    plt.imshow(sum_frame, cmap=plt.cm.hot, vmin=0, vmax=1)
     plt.colorbar()
     plt.show()
     sum_frame = np.zeros((HEIGHT, WIDTH))
@@ -158,11 +164,12 @@ if __name__ == '__main__':
         
         while not interrupted:
             if plotting:
-                plot_frame()
-                # np.save(
-                #     "alphabet_data/" + candidates[candidate_index] + "_" + str(current_record_num) + ".npy",
-                #     frame_series)
-                # frame_series = []
+                # plot_frame()
+                # print(left_bound, right_bound, up_bound, down_bound)
+                np.save(
+                    "alphabet_data/" + candidates[candidate_index] + "_" + str(current_record_num) + ".npy",
+                    frame_series)
+                frame_series = []
                 current_record_num += 1
                 plotting = False
             if (candidate_index >= len(candidates)):
