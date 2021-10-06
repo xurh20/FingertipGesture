@@ -76,12 +76,12 @@ if __name__ == "__main__":
             # tmp = [j for arr in x_train[i][k] for j in arr]
             # x_train[i][k] = 1
             # x_train[i][k] = x_train[i][k].re\
-        x_train[i] = x_train[i].reshape(first_dimention, 875)
+        x_train[i] = x_train[i].reshape(first_dimention, 980)
     for i in range(len(x_valid)):
         first_dimention = len(x_valid[i])
     #     for k in range(len(x_valid[i])):
     #         x_valid[i][k] = [j for arr in x_valid[i][k] for j in arr]
-        x_valid[i] = x_valid[i].reshape(first_dimention, 875)
+        x_valid[i] = x_valid[i].reshape(first_dimention, 980)
     # print(x_train)
     x_train = pad_sequences(x_train, maxlen=MAX_LEN, dtype="float32")
     x_valid = pad_sequences(x_valid, maxlen=MAX_LEN, dtype="float32")
