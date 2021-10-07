@@ -33,6 +33,8 @@ right_bound = 0
 down_bound = 0
 
 sum_frame = np.zeros((HEIGHT, WIDTH))
+frame_each = np.zeros(
+    (DOWN_BOUND + 1 - UP_BOUND, RIGHT_BOUND + 1 - LEFT_BOUND))
 frame_series = []
 
 frame_operator = lambda x: None
@@ -40,31 +42,35 @@ frame_operator = lambda x: None
 
 def wait_for_enter():
     global recording, interrupted, plotting, candidate_index, current_record_num
-    while True:
-        try:
-            if (recording):
-                code = input('Press Enter to stop...')
-                recording = False
-                plotting = True
-                # candidate_index += 1
-                if (code == 'q'):
-                    interrupted = True
-                    break
-            else:
-                code = input('Press Enter to start record of ' +
-                             candidates[candidate_index])
-                recording = True
-                if (code == 'q'):
-                    interrupted = True
-                    break
-                elif (code == 'c'):
-                    if (candidate_index < 26):
-                        candidate_index += 1
-                        current_record_num = 0
-                    continue
-        except:
-            interrupted = True
-            break
+    if args.interactive:
+        input("Press Enter to stop...")
+        interrupted = True
+    else:
+        while True:
+            try:
+                if (recording):
+                    code = input('Press Enter to stop...')
+                    recording = False
+                    plotting = True
+                    # candidate_index += 1
+                    if (code == 'q'):
+                        interrupted = True
+                        break
+                else:
+                    code = input('Press Enter to start record of ' +
+                                 candidates[candidate_index])
+                    recording = True
+                    if (code == 'q'):
+                        interrupted = True
+                        break
+                    elif (code == 'c'):
+                        if (candidate_index < 26):
+                            candidate_index += 1
+                            current_record_num = 0
+                        continue
+            except:
+                interrupted = True
+                break
     return
 
 
@@ -104,6 +110,17 @@ def print_bound_frame(frame, info: sensel.SenselSensorInfo):
                 up_bound = min(up_bound, i)
                 right_bound = max(right_bound, j)
                 down_bound = max(down_bound, i)
+
+
+def print_each_frame(frame, info: sensel.SenselSensorInfo):
+    global frame_each
+    rows = info.num_rows
+    cols = info.num_cols
+    for i in range(UP_BOUND, DOWN_BOUND + 1):
+        for j in range(LEFT_BOUND, RIGHT_BOUND + 1):
+            frame_each[i - UP_BOUND][j -
+                                     LEFT_BOUND] = frame.force_array[i * cols +
+                                                                     j]
 
 
 def print_max_frame(frame, info: sensel.SenselSensorInfo):
@@ -152,6 +169,13 @@ def plot_frame():
     sum_frame = np.zeros((HEIGHT, WIDTH))
 
 
+def plot_each_frame():
+    plt.clf()
+    plt.imshow(frame_each, cmap=plt.cm.hot, vmin=0, vmax=100)
+    plt.colorbar()
+    plt.pause(0.03)
+
+
 def close_sensel(frame):
     error = sensel.freeFrameData(handle, frame)
     error = sensel.stopScanning(handle)
@@ -164,6 +188,10 @@ if __name__ == '__main__':
                         "--bound",
                         action="store_true",
                         help="print record bounds")
+    parser.add_argument("-i",
+                        "--interactive",
+                        action="store_true",
+                        help="print interactive realtime pressure")
     parser.add_argument("-m",
                         "--max",
                         action="store_true",
@@ -184,6 +212,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.bound:
         frame_operator = print_bound_frame
+    elif args.interactive:
+        plt.ion()
+        recording = True
+        frame_operator = print_each_frame
     elif args.max:
         frame_operator = print_max_frame
     elif args.predict:
@@ -192,6 +224,9 @@ if __name__ == '__main__':
         frame_operator = save_frame
     elif args.sum:
         frame_operator = print_sum_frame
+    else:
+        print("Please enter the mode. Or check the list by -h")
+        exit(0)
 
     model = load_model('deal-with-data/model/lstm_model_weights.h5')
 
@@ -200,34 +235,45 @@ if __name__ == '__main__':
         error, info = sensel.getSensorInfo(handle)
         frame = init_frame()
 
-        t = threading.Thread(target=wait_for_enter)
-        t.setDaemon(True)
-        t.start()
         u = threading.Thread(target=scan_frames, args=(frame, info))
         u.setDaemon(True)
         u.start()
 
-        while not interrupted:
-            if plotting:
-                if args.bound:
-                    print(left_bound, right_bound, up_bound, down_bound)
-                elif args.max:
-                    plot_frame()
-                elif args.predict:
-                    frame_series = np.array([frame_series]).reshape(-1, len(frame_series), 980)
-                    # frame_series[0] = frame_series[0].reshape(-1, 980)
-                    frame_series = pad_sequences(frame_series, maxlen=MAX_LEN, dtype="float32")
-                    print(np.argmax(model.predict(frame_series), axis=-1))
-                elif args.record:
-                    np.save(
-                        "validation/" + candidates[candidate_index] + "_" +
-                        str(current_record_num) + ".npy", frame_series)
-                elif args.sum:
-                    plot_frame()
+        t = threading.Thread(target=wait_for_enter)
+        t.setDaemon(True)
+        t.start()
 
-                frame_series = []
-                current_record_num += 1
-                plotting = False
-            if (candidate_index >= len(candidates)):
-                break
+        if not args.interactive:
+
+            while not interrupted:
+                if plotting:
+                    if args.bound:
+                        print(left_bound, right_bound, up_bound, down_bound)
+                    elif args.max:
+                        plot_frame()
+                    elif args.predict:
+                        frame_series = np.array([frame_series]).reshape(
+                            -1, len(frame_series), 980)
+                        # frame_series[0] = frame_series[0].reshape(-1, 980)
+                        frame_series = pad_sequences(frame_series,
+                                                     maxlen=MAX_LEN,
+                                                     dtype="float32")
+                        print(np.argmax(model.predict(frame_series), axis=-1))
+                    elif args.record:
+                        np.save(
+                            "alphabet_data/" + candidates[candidate_index] +
+                            "_" + str(current_record_num) + ".npy",
+                            frame_series)
+                    elif args.sum:
+                        plot_frame()
+
+                    frame_series = []
+                    current_record_num += 1
+                    plotting = False
+                if (candidate_index >= len(candidates)):
+                    break
+
+        else:
+            while not interrupted:
+                plot_each_frame()
         close_sensel(frame)
