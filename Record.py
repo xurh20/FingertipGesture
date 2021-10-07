@@ -5,6 +5,7 @@ sys.path.append('sensel-lib-wrappers/sensel-lib-python')
 import sensel
 import numpy as np
 import matplotlib.pyplot as plt
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 import argparse
 
@@ -18,6 +19,7 @@ LEFT_BOUND = 79
 UP_BOUND = 34
 RIGHT_BOUND = 106
 DOWN_BOUND = 68
+MAX_LEN = 200
 
 recording = False
 interrupted = False
@@ -212,10 +214,13 @@ if __name__ == '__main__':
                 elif args.max:
                     plot_frame()
                 elif args.predict:
-                    print(model.predict(np.array(frame_series)))
+                    frame_series = np.array([frame_series]).reshape(-1, len(frame_series), 980)
+                    # frame_series[0] = frame_series[0].reshape(-1, 980)
+                    frame_series = pad_sequences(frame_series, maxlen=MAX_LEN, dtype="float32")
+                    print(np.argmax(model.predict(frame_series), axis=-1))
                 elif args.record:
                     np.save(
-                        "alphabet_data/" + candidates[candidate_index] + "_" +
+                        "validation/" + candidates[candidate_index] + "_" +
                         str(current_record_num) + ".npy", frame_series)
                 elif args.sum:
                     plot_frame()

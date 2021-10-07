@@ -12,6 +12,7 @@ from sklearn import metrics
 
 candidates = [chr(y) for y in range(97, 123)]
 BASE_DIR = "../alphabet_data/"
+VALID_DIR = "../validation/"
 TRAIN_NUM = 40
 VALID_NUM = 20
 CHAR_NUM = 6
@@ -23,6 +24,10 @@ def loadData(num):
     validData = []
     trainAns = []
     validAns = []
+
+    StableValidData = []
+    StableValidAns = [0, 1, 2, 3, 4, 5, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 5, 4, 3, 2, 1, 0]
+
     label_i = list(range(TRAIN_NUM + VALID_NUM))
     random.shuffle(label_i)
     print(label_i)
@@ -35,7 +40,12 @@ def loadData(num):
             validAns.append(char)
     print(len(trainData))
     print(len(trainData[0]))
-    return trainData, trainAns, validData, validAns
+
+    for i in range(12):
+        StableValidData.append(np.load(VALID_DIR + "a_" + str(i) + ".npy"))
+    for i in range(12):
+        StableValidData.append(np.load(VALID_DIR + "b_" + str(i) + ".npy"))
+    return trainData, trainAns, validData, validAns, StableValidData, StableValidAns
 
 def RNN_model_1(x_train_padded_seqs, y_train, x_test_padded_seqs, y_test, x_valid, y_valid):
     model = Sequential()
@@ -54,8 +64,9 @@ def RNN_model_1(x_train_padded_seqs, y_train, x_test_padded_seqs, y_test, x_vali
                             mode='max')
     callbacks_list = [checkpoint]
     model.fit(x_train_padded_seqs, y_train, epochs=15, batch_size=40, validation_data=(x_valid, y_valid), callbacks=callbacks_list)
-    print(x_test_padded_seqs)
+    # print(x_test_padded_seqs)
     y_predict = np.argmax(model.predict(x_test_padded_seqs), axis=-1)
+    print(y_predict)
     print('准确率', metrics.accuracy_score(y_test, y_predict))
     print('Micro', metrics.precision_score(y_test, y_predict, average='micro'))
     print('Macro', metrics.precision_score(y_test, y_predict, average='macro'))
@@ -76,7 +87,7 @@ def RNN_model_1(x_train_padded_seqs, y_train, x_test_padded_seqs, y_test, x_vali
 
 
 if __name__ == "__main__":
-    x_train, y_train, x_valid, y_valid = loadData(CHAR_NUM)
+    x_train, y_train, x_valid, y_valid, new_x_valid, new_y_valid = loadData(CHAR_NUM)
     for i in range(len(x_train)):
         first_dimention = len(x_train[i])
         # for k in range(len(x_train[i])):
@@ -86,15 +97,20 @@ if __name__ == "__main__":
         x_train[i] = x_train[i].reshape(first_dimention, 980)
     for i in range(len(x_valid)):
         first_dimention = len(x_valid[i])
-    #     for k in range(len(x_valid[i])):
-    #         x_valid[i][k] = [j for arr in x_valid[i][k] for j in arr]
         x_valid[i] = x_valid[i].reshape(first_dimention, 980)
+
+    for i in range(len(new_x_valid)):
+        first_dimention = len(new_x_valid[i])
+        new_x_valid[i] = new_x_valid[i].reshape(first_dimention, 980)
+
     # print(x_train)
     x_train = pad_sequences(x_train, maxlen=MAX_LEN, dtype="float32")
     x_valid = pad_sequences(x_valid, maxlen=MAX_LEN, dtype="float32")
+    new_x_valid = pad_sequences(new_x_valid, maxlen=MAX_LEN, dtype="float32")
     # print(x_train)
     # print(y_train)
     y_train = np.array(y_train)
     # print(y_train)
     y_valid = np.array(y_valid)
-    RNN_model_1(x_train, y_train, x_valid, y_valid, x_valid, y_valid)
+    new_y_valid = np.array(new_y_valid)
+    RNN_model_1(x_train, y_train, new_x_valid, new_y_valid, x_valid, y_valid)
