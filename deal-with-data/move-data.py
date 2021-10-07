@@ -1,6 +1,6 @@
 import shutil
 BASE_DIR = "../alphabet_data/"
-FROM_DIR = "../alphabet_data_hz/"
+FROM_DIR = "../alphabet_data_jjx/"
 candidates = [chr(y) for y in range(97, 123)]
 
 def moveData():
