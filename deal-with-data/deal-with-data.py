@@ -1,8 +1,10 @@
 import json
 import numpy as np
+import random
+from tensorflow.keras.preprocessing import sequence
 from tensorflow.keras.utils import to_categorical, plot_model
 from tensorflow.keras.models import Sequential, Model, load_model, model_from_json
-from tensorflow.keras.layers import Conv1D, Dropout, MaxPooling1D, Flatten, BatchNormalization, Dense, Input, LSTM, Bidirectional
+from tensorflow.keras.layers import Conv1D, Dropout, MaxPooling1D, Flatten, BatchNormalization, Dense, Input, LSTM, Bidirectional, Masking
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.backend import concatenate
 from tensorflow.keras.callbacks import ModelCheckpoint
@@ -10,10 +12,10 @@ from sklearn import metrics
 
 candidates = [chr(y) for y in range(97, 123)]
 BASE_DIR = "../alphabet_data/"
-TRAIN_NUM = 20
-VALID_NUM = 10
+TRAIN_NUM = 40
+VALID_NUM = 20
 CHAR_NUM = 6
-MAX_LEN = 100
+MAX_LEN = 200
 
 def loadData(num):
     # num 表示字母数量
@@ -21,12 +23,15 @@ def loadData(num):
     validData = []
     trainAns = []
     validAns = []
+    label_i = list(range(TRAIN_NUM + VALID_NUM))
+    random.shuffle(label_i)
+    print(label_i)
     for char in range(0, num):
         for i in range(0, TRAIN_NUM):
-            trainData.append(np.load(BASE_DIR + candidates[char] + "_" + str(i) + ".npy"))
+            trainData.append(np.load(BASE_DIR + candidates[char] + "_" + str(label_i[i]) + ".npy"))
             trainAns.append(char)
         for i in range(TRAIN_NUM, TRAIN_NUM + VALID_NUM):
-            validData.append(np.load(BASE_DIR + candidates[char] + "_" + str(i) + ".npy"))
+            validData.append(np.load(BASE_DIR + candidates[char] + "_" + str(label_i[i]) + ".npy"))
             validAns.append(char)
     print(len(trainData))
     print(len(trainData[0]))
@@ -34,7 +39,9 @@ def loadData(num):
 
 def RNN_model_1(x_train_padded_seqs, y_train, x_test_padded_seqs, y_test, x_valid, y_valid):
     model = Sequential()
+    model.add(Masking(mask_value=0, input_shape=(200, 980,)))
     model.add(Bidirectional(LSTM(64, return_sequences=True)))
+    model.add(Bidirectional(LSTM(64, return_sequences=False)))
     model.add(Flatten())
     model.add(Dropout(0.5))
     model.add(Dense(CHAR_NUM, activation='softmax'))
@@ -46,7 +53,7 @@ def RNN_model_1(x_train_padded_seqs, y_train, x_test_padded_seqs, y_test, x_vali
     checkpoint = ModelCheckpoint(filepath, monitor='val_accuracy', verbose=1, save_best_only=True,
                             mode='max')
     callbacks_list = [checkpoint]
-    model.fit(x_train_padded_seqs, y_train, epochs=10, batch_size=40, validation_data=(x_valid, y_valid), callbacks=callbacks_list)
+    model.fit(x_train_padded_seqs, y_train, epochs=15, batch_size=40, validation_data=(x_valid, y_valid), callbacks=callbacks_list)
     print(x_test_padded_seqs)
     y_predict = np.argmax(model.predict(x_test_padded_seqs), axis=-1)
     print('准确率', metrics.accuracy_score(y_test, y_predict))
