@@ -96,7 +96,7 @@ class FeedbackRecordWindow(QWidget):
         qp.begin(self)
         qb = QBrush(Qt.BrushStyle.SolidPattern)
         pixmap = QPixmap("./keyboard.png")
-        qp.drawPixmap(self.rect(), pixmap)
+        qp.drawPixmap(100, 80, 360, 440, pixmap)
         for i in range(35):
             for j in range(28):
                 red = (frame_each[i][j] /
@@ -104,7 +104,7 @@ class FeedbackRecordWindow(QWidget):
                 clr = QColor(int(red * 255), 0, 0, int(red * 100))
                 qb.setColor(clr)
                 qp.setBrush(qb)
-                qp.drawRect(j * 10, i * 10, 10, 10)
+                qp.drawRect(j * 20, i * 20, 20, 20)
         qp.end()
 
 
@@ -359,7 +359,7 @@ if __name__ == '__main__':
 
             app = pg.mkQApp()
             win = FeedbackRecordWindow()
-            win.resize(280, 350)
+            win.resize(560, 700)
             win.show()
             app.exec_()
         else:
