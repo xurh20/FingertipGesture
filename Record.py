@@ -214,7 +214,12 @@ if __name__ == '__main__':
                 elif args.max:
                     plot_frame()
                 elif args.predict:
-                    frame_series = np.array([frame_series]).reshape(-1, len(frame_series), 980)
+                    while True:
+                        try:
+                            frame_series = np.array([frame_series]).reshape(-1, len(frame_series), 980)
+                            break
+                        except:
+                            frame_series = frame_series[:-1]
                     # frame_series[0] = frame_series[0].reshape(-1, 980)
                     frame_series = pad_sequences(frame_series, maxlen=MAX_LEN, dtype="float32")
                     print(np.argmax(model.predict(frame_series), axis=-1))
