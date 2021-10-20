@@ -379,7 +379,7 @@ if __name__ == '__main__':
                         print(np.argmax(model.predict(frame_series), axis=-1))
                     elif args.record:
                         np.save(
-                            "alphabet_data/" + candidates[candidate_index] +
+                            "gt_jjx_1/" + candidates[candidate_index] +
                             "_" + str(current_record_num) + ".npy",
                             frame_series)
                     elif args.sum:
