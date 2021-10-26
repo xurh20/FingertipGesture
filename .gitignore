@@ -291,3 +291,11 @@ alphabet_data_from_jjx
 
 validation
 validation_1
+
+data/
+data_gt/
+pictures/
+pictures_red/
+*.zip
+
+*.mp4
