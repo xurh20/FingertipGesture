@@ -20,7 +20,7 @@ from pgcolorbar.colorlegend import ColorLegendItem
 import argparse
 
 # candidates = [chr(y) for y in range(97, 123)]
-candidates = [i for i in range(80)]
+candidates = [str(i) for i in range(80)]
 
 HEIGHT = 105
 WIDTH = 185
@@ -128,7 +128,6 @@ def wait_for_enter():
                                  candidates[candidate_index])
                     recording = True
                     if (code == 'q'):
-                        print("here")
                         interrupted = True
                         break
                     elif (code == 'c'):
