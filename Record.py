@@ -22,7 +22,8 @@ import argparse
 
 from keras.models import load_model
 
-candidates = [chr(y) for y in range(97, 123)]
+# candidates = [chr(y) for y in range(97, 123)]
+candidates = [i for i in range(80)]
 
 HEIGHT = 105
 WIDTH = 185
@@ -47,6 +48,7 @@ sum_frame = np.zeros((HEIGHT, WIDTH))
 frame_each = np.zeros(
     (DOWN_BOUND + 1 - UP_BOUND, RIGHT_BOUND + 1 - LEFT_BOUND))
 frame_series = []
+tsp_series = []
 
 frame_operator = lambda x: None
 
@@ -225,7 +227,7 @@ def print_sum_frame(frame, info: sensel.SenselSensorInfo):
 
 
 def save_frame(frame, info: sensel.SenselSensorInfo):
-    global frame_series
+    global frame_series, tsp_series
     rows = info.num_rows
     cols = info.num_cols
     fs = np.zeros((DOWN_BOUND + 1 - UP_BOUND, RIGHT_BOUND + 1 - LEFT_BOUND))
@@ -233,6 +235,7 @@ def save_frame(frame, info: sensel.SenselSensorInfo):
         for j in range(LEFT_BOUND, RIGHT_BOUND + 1):
             fs[i - UP_BOUND][j - LEFT_BOUND] += frame.force_array[i * cols + j]
     frame_series.append(fs)
+    tsp_series.append(time.time())
 
 
 def plot_frame():
@@ -379,13 +382,18 @@ if __name__ == '__main__':
                         print(np.argmax(model.predict(frame_series), axis=-1))
                     elif args.record:
                         np.save(
-                            "gt_jjx_1/" + candidates[candidate_index] +
+                            save_dir + "/" + candidates[candidate_index] +
                             "_" + str(current_record_num) + ".npy",
                             frame_series)
+                        np.save(
+                            save_dir + "/" + candidates[candidate_index] +
+                            "_" + str(current_record_num) + "_tsp" + ".npy",
+                            tsp_series)
                     elif args.sum:
                         plot_frame()
 
                     frame_series = []
+                    tsp_series = []
                     current_record_num += 1
                     plotting = False
                 if (candidate_index >= len(candidates)):
