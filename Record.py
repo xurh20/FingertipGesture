@@ -7,7 +7,6 @@ sys.path.append('sensel-lib-wrappers/sensel-lib-python')
 import sensel
 import numpy as np
 import matplotlib.pyplot as plt
-from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 import pyqtgraph as pg
 from PyQt5 import QtCore, QtWidgets
@@ -19,8 +18,6 @@ from colour import Color
 from pgcolorbar.colorlegend import ColorLegendItem
 
 import argparse
-
-from keras.models import load_model
 
 # candidates = [chr(y) for y in range(97, 123)]
 candidates = [i for i in range(80)]
@@ -131,9 +128,8 @@ def wait_for_enter():
                                  candidates[candidate_index])
                     recording = True
                     if (code == 'q'):
+                        print("here")
                         interrupted = True
-                        if args.feedback:
-                            QtCore.QCoreApplication.instance().quit()
                         break
                     elif (code == 'c'):
                         if (candidate_index < 26):
@@ -142,8 +138,6 @@ def wait_for_enter():
                         continue
             except:
                 interrupted = True
-                if args.feedback:
-                    QtCore.QCoreApplication.instance().quit()
                 break
     return
 
@@ -337,7 +331,10 @@ if __name__ == '__main__':
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
-    model = load_model('deal-with-data/model/lstm_model_weights.h5')
+    if args.predict:
+        from keras.models import load_model
+        model = load_model('deal-with-data/model/lstm_model_weights.h5')
+        from tensorflow.keras.preprocessing.sequence import pad_sequences
 
     handle = open_sensel()
     if handle:
