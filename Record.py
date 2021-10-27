@@ -126,15 +126,22 @@ def wait_for_enter():
                 else:
                     code = input('Press Enter to start record of ' +
                                  candidates[candidate_index])
-                    recording = True
                     if (code == 'q'):
                         interrupted = True
                         break
                     elif (code == 'c'):
-                        if (candidate_index < 26):
+                        if (candidate_index < len(candidates)):
                             candidate_index += 1
                             current_record_num = 0
                         continue
+                    elif (code == 'b'):
+                        candidate_index -= 1
+                        if candidate_index < 0:
+                            candidate_index = 0
+                        current_record_num = 0
+                        continue
+                    else:
+                        recording = True
             except:
                 interrupted = True
                 break
