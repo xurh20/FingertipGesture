@@ -9,8 +9,10 @@ from itertools import chain
 
 from numpy.core.numeric import allclose
 
-PERSON = "cwh"
-BASE_DIR = "../data_gt/" + PERSON + "/"
+PERSON = "lyh"
+BASE_DIR = "../data/alphabeta_data_" + PERSON + "/"
+SAVE_DIR = "../data/saved_data_" + PERSON + "/"
+VIDEO_DIR = "../data/videos/"
 SAVE_PICTURE_DIR = "../pictures_red/"
 candidates = [chr(y) for y in range(97, 123)]
 LEFT_BOUND = 79
@@ -22,11 +24,11 @@ HEIGHT = DOWN_BOUND - UP_BOUND + 1
 MIN_CORNER_ANGLE = 60
 MIN_LINE_LENGTH = 0.5 # just experience
 
-SENTENCE = 2
-WORD = 0
+SENTENCE = 65
+WORD = 4
 
 def loadData():
-    data = np.load(BASE_DIR + candidates[SENTENCE] + "_" + str(WORD) + ".npy")
+    data = np.load(BASE_DIR + str(SENTENCE) + "_" + str(WORD) + ".npy")
     # print(data)
     return data
 
@@ -55,54 +57,72 @@ def calculatePoints(data):
 def showPicture(points_x, points_y, depths):
     max_depth = max(depths)
     colors = list(map(lambda x : '#' + str(hex(255 - int(x / max_depth * 255)))[2:].rjust(2, '0') * 3, depths))
+
     centerPointGroups = calCorner(points_x, points_y, depths)
     for group in range(len(centerPointGroups)):
         for point in centerPointGroups[group]:
             colors[point] = "#FF0000"
             plt.text(points_x[point], points_y[point], group)
+
     # plt.axis('equal')
     # plt.gca().set_aspect('equal', adjustable='box')
     plt.scatter(points_x, points_y, c=colors)
     # print(colors)
     x_bound = (min(points_x) - 1, max(points_x) + 1)
     y_bound = (min(points_y) - 1, max(points_y) + 1)
-    plt.xlim((-7, 6))
-    plt.ylim((-4, 8))
+    plt.xlim((-7, 8))
+    plt.ylim((-4, 10))
     plt.plot(points_x, points_y, linestyle='--')
     plt.show()
 
 def saveAllPicures():
-    for i in range(20):
-        for j in range(8):
+    for i in range(82):
+        for j in range(20):
             SENTENCE = i
             WORD = j
-            if os.path.exists(BASE_DIR + candidates[SENTENCE] + "_" + str(WORD) + ".npy"):
-                data = np.load(BASE_DIR + candidates[SENTENCE] + "_" + str(WORD) + ".npy")
+            if os.path.exists(BASE_DIR + str(SENTENCE) + "_" + str(WORD) + ".npy"):
+                data = np.load(BASE_DIR + str(SENTENCE) + "_" + str(WORD) + ".npy")
                 points_x, points_y, depths = calculatePoints(data)
                 if (len(points_x) == 0):
                     continue
-                centerPointGroups = calCorner(points_x, points_y, depths)
+                # centerPointGroups = calCorner(points_x, points_y, depths)
                 points_x = list(map(lambda x : x - WIDTH / 2, points_x))
                 points_y = list(map(lambda x : x + HEIGHT / 2, points_y))
                 max_depth = max(depths)
                 colors = list(map(lambda x : '#' + str(hex(255 - int(x / max_depth * 255)))[2:].rjust(2, '0') * 3, depths))
-                for group in range(len(centerPointGroups)):
-                    for point in centerPointGroups[group]:
-                        colors[point] = "#FF0000"
-                        plt.text(points_x[point], points_y[point], group)
+                # for group in range(len(centerPointGroups)):
+                #     for point in centerPointGroups[group]:
+                #         colors[point] = "#FF0000"
+                #         plt.text(points_x[point], points_y[point], group)
                 plt.axis('scaled')
                 plt.scatter(points_x, points_y, c=colors)
                 x_bound = (min(points_x) - 1, max(points_x) + 1)
                 y_bound = (min(points_y) - 1, max(points_y) + 1)
-                plt.xlim(x_bound)
-                plt.ylim(y_bound)
+                # plt.xlim(x_bound)
+                # plt.ylim(y_bound)
+                plt.xlim((-7, 8))
+                plt.ylim((-4, 10))
                 plt.plot(points_x, points_y, linestyle='--')
                 if (not os.path.exists(SAVE_PICTURE_DIR + PERSON)):
                     os.makedirs(SAVE_PICTURE_DIR + PERSON)
                 plt.savefig(os.path.join(SAVE_PICTURE_DIR + PERSON, "{}_{}.png".format(i, j)))
                 plt.close()
 
-def saveVideo(points_x, points_y, depths):
+def savePremativeData():
+    if (not os.path.exists(SAVE_DIR)):
+        os.makedirs(SAVE_DIR)
+    for i in range(82):
+        for j in range(20):
+            SENTENCE = i
+            WORD = j
+            if os.path.exists(BASE_DIR + str(SENTENCE) + "_" + str(WORD) + ".npy"):
+                data = np.load(BASE_DIR + str(SENTENCE) + "_" + str(WORD) + ".npy")
+                points_x, points_y, depths = calculatePoints(data)
+                np.save(SAVE_DIR + str(SENTENCE) + "_" + str(WORD) + "_x" + ".npy", points_x)
+                np.save(SAVE_DIR + str(SENTENCE) + "_" + str(WORD) + "_y" + ".npy", points_y)
+                np.save(SAVE_DIR + str(SENTENCE) + "_" + str(WORD) + "_d" + ".npy", depths)
+
+def saveVideo(points_x, points_y, depths, PERSON):
     max_depth = max(depths)
     colors = list(map(lambda x : '#' + str(hex(255 - int(x / max_depth * 255)))[2:].rjust(2, '0') * 3, depths))
     x_bound = (min(points_x) - 1, max(points_x) + 1)
@@ -111,14 +131,16 @@ def saveVideo(points_x, points_y, depths):
         plt.axis('scaled')
         plt.scatter(points_x[:i+1], points_y[:i+1], c=colors[:i+1])
         plt.plot(points_x[:i+1], points_y[:i+1], linestyle='--', color="darkcyan")
-        plt.xlim(x_bound)
-        plt.ylim(y_bound)
+        # plt.xlim(x_bound)
+        # plt.ylim(y_bound)
+        plt.xlim((-7, 8))
+        plt.ylim((-4, 10))
         plt.savefig(os.path.join(SAVE_PICTURE_DIR, "{}.png".format(i)))
 
     images = []
     for i in range(len(points_x)):
         images.append(imageio.imread(os.path.join(SAVE_PICTURE_DIR, "{}.png".format(i))))
-    imageio.mimsave('{}.mp4'.format("plot_" + str(SENTENCE) + "_" + str(WORD)), images)
+    imageio.mimsave('{}.mp4'.format(VIDEO_DIR + PERSON + "_plot_" + str(SENTENCE) + "_" + str(WORD)), images)
 
 def calAngle(vector_1, vector_2): # vector should be np array return degree
     cosangle = vector_1.dot(vector_2)/(np.linalg.norm(vector_1) * np.linalg.norm(vector_2))
@@ -145,11 +167,11 @@ def calCorner(points_x, points_y, depths):
             vector_1 = np.array(points[i - 1]) - np.array(points[i - 2])
             vector_2 = np.array(points[i + 2]) - np.array(points[i + 1])
             angle = calAngle(vector_1, vector_2)
-            if (angle >= MIN_CORNER_ANGLE and depths[i] > 3000):
+            if (angle >= MIN_CORNER_ANGLE and depths[i] > 500):
                 # search before
                 j = i
                 while(j >= 0):
-                    if np.linalg.norm(np.array(points[i]) - np.array(points[j])) < MIN_LINE_LENGTH and depths[j] > 3000:
+                    if np.linalg.norm(np.array(points[i]) - np.array(points[j])) < MIN_LINE_LENGTH and depths[j] > 500:
                         centerPointSingle.append(j)
                         j = j - 1
                     else:
@@ -158,7 +180,7 @@ def calCorner(points_x, points_y, depths):
                 # search after
                 j = i + 1
                 while(j < len(points_x)):
-                    if np.linalg.norm(np.array(points[i]) - np.array(points[j])) < MIN_LINE_LENGTH and depths[j] > 3000:
+                    if np.linalg.norm(np.array(points[i]) - np.array(points[j])) < MIN_LINE_LENGTH and depths[j] > 500:
                         centerPointSingle.append(j)
                         j = j + 1
                     else:
@@ -224,6 +246,10 @@ if __name__ == "__main__":
                         "--video",
                         action="store_true",
                         help="save video")
+    parser.add_argument("-d",
+                        "--savedata",
+                        action="store_true",
+                        help="save data")
     args = parser.parse_args()
 
     data = loadData()
@@ -236,7 +262,21 @@ if __name__ == "__main__":
     elif args.all:
         saveAllPicures()
     elif args.video:
-        saveVideo(points_x, points_y, depths)
+        for PERSON in ["gww", "hxz", "ljh", "lyh", "lzp", "qlp", "tty", "xq"]:
+            for i in range(1, 82):
+                for j in range(20):
+                    SENTENCE = i
+                    WORD = j
+                    BASE_DIR = "../data/alphabeta_data_" + PERSON + "/"
+                    if os.path.exists(BASE_DIR + str(SENTENCE) + "_" + str(WORD) + ".npy"):
+                        data = np.load(BASE_DIR + str(SENTENCE) + "_" + str(WORD) + ".npy")
+                        points_x, points_y, depths = calculatePoints(data)
+                        points_x = list(map(lambda x : x - WIDTH / 2, points_x))
+                        points_y = list(map(lambda x : x + HEIGHT / 2, points_y))
+                        saveVideo(points_x, points_y, depths, PERSON)
+                        print("done" + "_" + str(i) + "_" + str(j))
+    elif args.savedata:
+        savePremativeData()
     else:
         centerPointGroups = calCorner(points_x, points_y, depths)
         print(centerPointGroups)
