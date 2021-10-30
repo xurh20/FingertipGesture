@@ -1,6 +1,9 @@
 import numpy as np
-import math
+import math, random
 from numpy.core.numeric import Inf
+import matplotlib.pyplot as plt
+from queue import PriorityQueue
+from tqdm import tqdm, trange
 
 STD_KB_WIDTH = 1083
 STD_KB_HEIGHT = 351
@@ -33,13 +36,23 @@ STD_KB_POS = {
     'm': (232, -105)
 }
 
+WORD_SET = []
+
 
 def identity(pos: tuple[float, float]):
     return pos
 
 
+def linear_rectangle(pos: tuple[float, float]):
+    center = (0, 0)
+    width = 10
+    height = 20
+    return (center[0] + pos[0] * width / STD_KB_WIDTH,
+            center[1] + pos[1] * height / STD_KB_HEIGHT)
+
+
 def key_transform(pos: tuple[float, float]):
-    return identity(pos)
+    return linear_rectangle(pos)
 
 
 def distance(p: tuple[float, float], q: tuple[float, float]) -> float:
@@ -47,21 +60,6 @@ def distance(p: tuple[float, float], q: tuple[float, float]) -> float:
 
 
 def minimum_jerk(path, word: str):
-    """
-    description
-    ---------
-    uses mininum jerk algorithm to make segemnts of given path
-    
-    param
-    -------
-    path: array of (x, y)
-    word: string of the word
-    
-    Returns
-    -------
-    segments: array of segments with coordinates
-    
-    """
     if len(path) < 5:
         print("too short for minimum jerk")
         return [i for i in range(len(path))]
@@ -94,36 +92,28 @@ def minimum_jerk(path, word: str):
     return segments
 
 
-def generate_standard_pattern(word: str, num_pieces: int):
-    """
-    description
-    ---------
-    generate **standard** pattern for the given word with num_pieces
-    
-    param
-    -------
-    word: target word
-    num_pieces: number of pieces
-    
-    Returns
-    -------
-    pattern: array of coordinates
-    
-    """
+def generate_standard_pattern(word: str, num_nodes: int):
     nodes = []
     pattern = []
-    for c in word:
+    for i, c in enumerate(word):
+        if (i > 0 and word[i] == word[i - 1]):
+            continue
         nodes.append(key_transform(STD_KB_POS[c]))
+    if len(nodes) == 1:
+        return [nodes[0] for i in range(num_nodes)]
     total_len = 0
     for i in range(len(nodes) - 1):
         total_len += distance(nodes[i], nodes[i + 1])
+    num_pieces = num_nodes - 1
     used_pieces = 0
     for i in range(len(nodes) - 1):
-        if i == len(nodes) - 1:
-            p1 = total_len - used_pieces
+        if i == len(nodes) - 2:
+            p1 = num_pieces - used_pieces
         else:
             d1 = distance(nodes[i], nodes[i + 1])
             p1 = int(d1 * num_pieces / total_len)
+        if p1 == 0:
+            continue
         delta_x = (nodes[i + 1][0] - nodes[i][0]) / p1
         delta_y = (nodes[i + 1][1] - nodes[i][1]) / p1
         for j in range(0, p1):
@@ -131,25 +121,11 @@ def generate_standard_pattern(word: str, num_pieces: int):
                 (nodes[i][0] + delta_x * j, nodes[i][1] + delta_y * j))
         used_pieces += p1
     pattern.append(nodes[-1])
+    assert len(pattern) == num_nodes
     return pattern
 
 
 def location_distance(path, pattern):
-    """
-    description
-    ---------
-    compute location distance of the user path and pattern
-    
-    param
-    -------
-    path: user path
-    pattern: standard pattern
-    
-    Returns
-    -------
-    distance: float
-    
-    """
     assert len(path) == len(pattern)
     r = 1
     weights = [1 / len(path) for i in range(len(path))]
@@ -172,12 +148,114 @@ def location_distance(path, pattern):
     return ld
 
 
-def get_user_path():
+def init_word_set():
     pass
+
+
+def get_word(sen, wor):
+    with open("data/voc.txt", 'r') as file:
+        try:
+            lines = file.readlines()
+            line = lines[sen - 1]
+            return line.replace('\n', '').split(' ')[wor]
+        except:
+            return None
+
+
+def get_user_path(path_dir, sentence, piece):
+    try:
+        ox = np.load(path_dir + "/%d_%d_x.npy" % (sentence, piece))
+        oy = np.load(path_dir + "/%d_%d_y.npy" % (sentence, piece))
+    except:
+        return None, None
+    ox = [ox[i] - ox[0] for i in range(len(ox))]
+    oy = [oy[i] - oy[0] for i in range(len(oy))]
+    return (ox, oy)
+
+
+def draw_mininum_jerk(path_dir, sentence, piece):
+    path = list(zip(*get_user_path(path_dir, sentence, piece)))
+    word = get_word(sentence, piece)
+    segments = minimum_jerk(path, word)
+    for segment in segments:
+        x = [seg[0] for seg in segment]
+        y = [seg[1] for seg in segment]
+        c = [
+            "#" +
+            ''.join([random.choice('0123456789ABCDEF') for j in range(6)])
+        ]
+        plt.scatter(x, y, c=c)
+    plt.show()
+
+
+def check_top_k():
+    total = 0
+    top_1 = 0
+    top_2 = 0
+    top_3 = 0
+    for i in trange(1, 80):
+        for j in trange(1, 12):
+            x, y = get_user_path("data/path_lyh", i, j)
+            word = get_word(i, j)
+            if word is not None and x is not None:
+                nodes = len(x)
+                total += 1
+                q = PriorityQueue()
+                for u in range(1, 80):
+                    for v in range(1, 12):
+                        w1 = get_word(u, v)
+                        if w1 is not None:
+                            d = location_distance(
+                                list(zip(x, y)),
+                                generate_standard_pattern(word, nodes))
+                            q.put((d, w1))
+                top = []
+                # top 1
+                top.append(q.get())
+                if word in top:
+                    top_1 += 1
+                # top 2
+                while len(top) != 2:
+                    second = q.get()
+                    if second not in top:
+                        top.append(second)
+                if word in top:
+                    top_2 += 1
+                # top 3
+                while len(top) != 3:
+                    third = q.get()
+                    if third not in top:
+                        top.append(third)
+                if word in top:
+                    top_3 += 1
+                print(top)
+    print("total: %d" % total)
+    print("top1 acc: %f" % (top_1 / total))
+    print("top2 acc: %f" % (top_2 / total))
+    print("top3 acc: %f" % (top_3 / total))
+
+
+def show_difference():
+    plt.axis('scaled')
+    plt.xlim((-10, 10))
+    plt.ylim((-10, 10))
+    i = random.randint(1, 80)
+    j = random.randint(1, 5)
+    x, y = get_user_path("data/path_lyh", i, j)
+    word = get_word(i, j)
+    if word is not None and x is not None:
+        print(word)
+        pattern = generate_standard_pattern(word, len(x))
+        gx = [seg[0] for seg in pattern]
+        gy = [seg[1] for seg in pattern]
+        plt.scatter(x, y, c='r')
+        plt.scatter(gx, gy, c='g')
+        plt.show()
 
 
 def main():
-    pass
+    # show_difference()
+    check_top_k()
 
 
 if __name__ == "__main__":
