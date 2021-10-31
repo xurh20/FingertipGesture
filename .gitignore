@@ -288,9 +288,18 @@ alphabet_data_lly
 alphabet_data_old_jjx
 alphabet_data_old_hz
 alphabet_data_new_hz
+alphabet_data_from_jjx
 
 validation
 validation_1
 alphabet_data_from_jjx
 data
 data_gt
+
+data/
+data_gt/
+pictures/
+pictures_red/
+*.zip
+
+*.mp4

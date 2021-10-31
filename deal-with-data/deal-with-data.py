@@ -12,9 +12,9 @@ from sklearn import metrics
 
 candidates = [chr(y) for y in range(97, 123)]
 BASE_DIR = "../alphabet_data/"
-VALID_DIR = "../validation/"
-TRAIN_NUM = 40
-VALID_NUM = 20
+VALID_DIR = "../validation_1/"
+TRAIN_NUM = 60
+VALID_NUM = 30
 CHAR_NUM = 6
 MAX_LEN = 200
 
@@ -26,7 +26,8 @@ def loadData(num):
     validAns = []
 
     StableValidData = []
-    StableValidAns = [0, 1, 2, 3, 4, 5, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 5, 4, 3, 2, 1, 0]
+    # StableValidAns = [0, 1, 2, 3, 4, 5, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 5, 4, 3, 2, 1, 0]
+    StableValidAns = []
 
     label_i = list(range(TRAIN_NUM + VALID_NUM))
     random.shuffle(label_i)
@@ -38,13 +39,16 @@ def loadData(num):
         for i in range(TRAIN_NUM, TRAIN_NUM + VALID_NUM):
             validData.append(np.load(BASE_DIR + candidates[char] + "_" + str(label_i[i]) + ".npy"))
             validAns.append(char)
-    print(len(trainData))
-    print(len(trainData[0]))
 
-    for i in range(12):
-        StableValidData.append(np.load(VALID_DIR + "a_" + str(i) + ".npy"))
-    for i in range(12):
-        StableValidData.append(np.load(VALID_DIR + "b_" + str(i) + ".npy"))
+    # for i in range(12):
+    #     StableValidData.append(np.load(VALID_DIR + "a_" + str(i) + ".npy"))
+    # for i in range(12):
+    #     StableValidData.append(np.load(VALID_DIR + "b_" + str(i) + ".npy"))
+    for i in range(6):
+        for j in range(10):
+            StableValidData.append(np.load(VALID_DIR + candidates[i] + "_" + str(j + 110) + ".npy"))
+            StableValidAns.append(i)
+    print(StableValidAns)
     return trainData, trainAns, validData, validAns, StableValidData, StableValidAns
 
 def RNN_model_1(x_train_padded_seqs, y_train, x_test_padded_seqs, y_test, x_valid, y_valid):
@@ -63,7 +67,7 @@ def RNN_model_1(x_train_padded_seqs, y_train, x_test_padded_seqs, y_test, x_vali
     checkpoint = ModelCheckpoint(filepath, monitor='val_accuracy', verbose=1, save_best_only=True,
                             mode='max')
     callbacks_list = [checkpoint]
-    model.fit(x_train_padded_seqs, y_train, epochs=15, batch_size=40, validation_data=(x_valid, y_valid), callbacks=callbacks_list)
+    model.fit(x_train_padded_seqs, y_train, epochs=10, batch_size=40, validation_data=(x_valid, y_valid), callbacks=callbacks_list)
     # print(x_test_padded_seqs)
     y_predict = np.argmax(model.predict(x_test_padded_seqs), axis=-1)
     print(y_predict)
