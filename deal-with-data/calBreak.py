@@ -26,7 +26,14 @@ def checkBreak(person):
         for j in range(len(rawNums[i])):
             sentence.append(rawNums[i][j] - readNums[i][j])
         all_sentence.append(sentence)
-    return all_sentence
+    combined_sentence = []
+    for i in all_sentence:
+        for j in i:
+            combined_sentence.append(j)
+    return combined_sentence
 
 if __name__ == "__main__":
-    print(checkBreak("qlp"))
+    breakList = checkBreak("lzp")
+    breakList = breakList[200:-1]
+    print(breakList.count(-3), breakList.count(-2), breakList.count(-1), breakList.count(0), breakList.count(1), breakList.count(2))
+    print(len(breakList))
