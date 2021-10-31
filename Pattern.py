@@ -1,9 +1,11 @@
 import numpy as np
-import math, random
+import math, random, json
 from numpy.core.numeric import Inf
 import matplotlib.pyplot as plt
 from queue import PriorityQueue
 from tqdm import tqdm, trange
+from dtw import dtw
+from scipy.special import erf
 
 STD_KB_WIDTH = 1083
 STD_KB_HEIGHT = 351
@@ -59,6 +61,63 @@ def distance(p: tuple[float, float], q: tuple[float, float]) -> float:
     return math.sqrt((p[0] - q[0])**2 + (p[1] - q[1])**2)
 
 
+def aggregate(data):
+    points_x = []
+    points_y = []
+    depths = []
+    for frame in data:
+        sum_force = 0
+        x_average = 0
+        y_average = 0
+        for y_coordinate in range(len(frame)):
+            for x_coordinate in range(len(frame[y_coordinate])):
+                sum_force += frame[y_coordinate][x_coordinate]
+        if (sum_force > 100):
+            for y_coordinate in range(len(frame)):
+                for x_coordinate in range(len(frame[y_coordinate])):
+                    rate = frame[y_coordinate][x_coordinate] / sum_force
+                    x_average += rate * x_coordinate
+                    y_average += rate * y_coordinate * -1
+            points_x.append(x_average)
+            points_y.append(y_average)
+            depths.append(sum_force)
+    # Normalize depths
+    if (len(depths) > 0):
+        max_depth = max(depths)
+        depths = [i / max_depth for i in depths]
+    # Merge points
+    merge_num = 1
+    while merge_num > 0:
+        merge_num = 0
+        i = 0
+        while i < len(points_x) - 1:
+            if np.linalg.norm(
+                    np.array([points_x[i], points_y[i]]) -
+                    np.array([points_x[i + 1], points_y[i + 1]])) < 0.3:
+                x = (points_x[i] + points_x[i + 1]) / 2
+                y = (points_y[i] + points_y[i + 1]) / 2
+                d = (depths[i] + depths[i + 1]) / 2
+                del (points_x[i])
+                del (points_x[i])
+                del (points_y[i])
+                del (points_y[i])
+                del (depths[i])
+                del (depths[i])
+                points_x.insert(i, x)
+                points_y.insert(i, y)
+                depths.insert(i, d)
+                merge_num += 1
+            else:
+                # print(np.linalg.norm(np.array([points_x[i], points_y[i]]) - np.array([points_x[i + 1], points_y[i + 1]])))
+                # print([points_x[i], points_y[i]])
+                # print([points_x[i + 1], points_y[i + 1]])
+                i += 1
+
+    points_x = [points_x[i] - points_x[0] for i in range(len(points_x))]
+    points_y = [points_y[i] - points_y[0] for i in range(len(points_y))]
+    return points_x, points_y
+
+
 def minimum_jerk(path, word: str):
     if len(path) < 5:
         print("too short for minimum jerk")
@@ -92,7 +151,8 @@ def minimum_jerk(path, word: str):
     return segments
 
 
-def generate_standard_pattern(word: str, num_nodes: int):
+def generate_standard_pattern(word: str, num_nodes: int, distribute,
+                              seg_index: list):
     nodes = []
     pattern = []
     for i, c in enumerate(word):
@@ -114,14 +174,16 @@ def generate_standard_pattern(word: str, num_nodes: int):
             p1 = int(d1 * num_pieces / total_len)
         if p1 == 0:
             continue
-        delta_x = (nodes[i + 1][0] - nodes[i][0]) / p1
-        delta_y = (nodes[i + 1][1] - nodes[i][1]) / p1
+        delta_x = nodes[i + 1][0] - nodes[i][0]
+        delta_y = nodes[i + 1][1] - nodes[i][1]
         for j in range(0, p1):
-            pattern.append(
-                (nodes[i][0] + delta_x * j, nodes[i][1] + delta_y * j))
+            pattern.append((nodes[i][0] + delta_x * distribute(j / p1),
+                            nodes[i][1] + delta_y * distribute(j / p1)))
         used_pieces += p1
     pattern.append(nodes[-1])
-    assert len(pattern) == num_nodes
+    if len(pattern) != num_nodes:
+        print(word, num_nodes)
+        raise Exception()
     return pattern
 
 
@@ -146,6 +208,17 @@ def location_distance(path, pattern):
         for i in range(len(path)):
             ld += weights[i] * distance(path[i], pattern[i])
     return ld
+
+
+def dynamic_time_warping(path, pattern):
+    d, cost_matrix, acc_cost_matrix, pair = dtw(path, pattern, dist=distance)
+    # plt.imshow(acc_cost_matrix.T,
+    #            origin='lower',
+    #            cmap='gray',
+    #            interpolation='nearest')
+    # plt.plot(pair[0], pair[1], 'w')
+    # plt.show()
+    return d
 
 
 def init_word_set():
@@ -181,6 +254,31 @@ def get_user_path(path_dir, sentence, piece):
     return (ox, oy)
 
 
+def get_user_path_json(path_dir, sentence, piece):
+    try:
+        file = open(
+            'data/break_point/' + path_dir + '_%d_%d.txt' % (sentence, piece),
+            'r')
+        lines = file.readlines()
+        path = json.loads(lines[0])
+        ox = [p[0] for p in path]
+        oy = [p[1] for p in path]
+    except:
+        return None, None
+    ox = [ox[i] - ox[0] for i in range(len(ox))]
+    oy = [oy[i] - oy[0] for i in range(len(oy))]
+    return (ox, oy)
+
+
+def get_user_path_original(path_dir, sentence, piece):
+    try:
+        data = np.load('data/alphabeta_data_' + path_dir + "/" +
+                       str(sentence) + "_" + str(piece) + ".npy")
+        return data
+    except:
+        return None
+
+
 def draw_mininum_jerk(path_dir, sentence, piece):
     path = list(zip(*get_user_path(path_dir, sentence, piece)))
     word = get_word(sentence, piece)
@@ -204,15 +302,25 @@ def check_top_k():
     for i in trange(1, 80):
         for j in trange(1, 12):
             x, y = get_user_path("data/path_lyh", i, j)
+            # x, y = get_user_path_json(name, i, j)
             word = get_word(i, j)
             if word is not None and x is not None:
                 nodes = len(x)
+                if nodes == 0:
+                    continue
                 total += 1
                 q = PriorityQueue()
                 for w1 in WORD_SET:
-                    d = location_distance(
+                    # location_distance
+                    # d = location_distance(
+                    #     list(zip(x, y)),
+                    #     generate_standard_pattern('g' + w1, nodes))
+                    # basic dtw
+                    d = dynamic_time_warping(
                         list(zip(x, y)),
-                        generate_standard_pattern('g' + w1, nodes))
+                        generate_standard_pattern(
+                            'g' + w1 + 'g', nodes,
+                            lambda x: -2 * x**3 + 3 * x**2))
                     q.put((d, w1))
                 top = []
                 # top 1
@@ -238,25 +346,35 @@ def show_difference():
     plt.axis('scaled')
     plt.xlim((-10, 10))
     plt.ylim((-10, 10))
-    # i = random.randint(1, 80)
-    # j = random.randint(1, 5)
-    i, j = 1, 1
-    x, y = get_user_path("data/path_lyh", i, j)
+    i = random.randint(1, 80)
+    j = random.randint(1, 5)
+    # i, j = 1, 1
+    # x, y = get_user_path("data/path_lyh", i, j)
+    # x, y = get_user_path_json("lyh", i, j)
+    data = get_user_path_original("lyh", i, j)
+    if data is None:
+        return
+    x, y = aggregate(data)
     word = get_word(i, j)
-    if word is not None and x is not None:
+    if word is not None:
         print(word)
-        pattern = generate_standard_pattern('g' + word, len(x))
+
+        pattern = generate_standard_pattern('g' + word + 'g', len(x),
+                                            lambda x: -2 * x**3 + 3 * x**2)
         gx = [seg[0] for seg in pattern]
         gy = [seg[1] for seg in pattern]
         plt.scatter(x, y, c='r')
         plt.scatter(gx, gy, c='g')
+        for i in range(len(x)):
+            plt.plot([x[i], gx[i]], [y[i], gy[i]], c='b')
         plt.show()
+        # dynamic_time_warping(list(zip(x, y)), list(zip(gx, gy)))
 
 
 def main():
     while True:
         show_difference()
-    # check_top_k()
+    check_top_k()
 
 
 if __name__ == "__main__":
