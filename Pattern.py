@@ -36,7 +36,7 @@ STD_KB_POS = {
     'm': (232, -105)
 }
 
-WORD_SET = []
+WORD_SET = set()
 
 
 def identity(pos: tuple[float, float]):
@@ -45,8 +45,8 @@ def identity(pos: tuple[float, float]):
 
 def linear_rectangle(pos: tuple[float, float]):
     center = (0, 0)
-    width = 10
-    height = 20
+    width = 8
+    height = 18
     return (center[0] + pos[0] * width / STD_KB_WIDTH,
             center[1] + pos[1] * height / STD_KB_HEIGHT)
 
@@ -149,7 +149,15 @@ def location_distance(path, pattern):
 
 
 def init_word_set():
-    pass
+    with open("data/voc.txt", 'r') as file:
+        lines = file.readlines()
+        for i in range(1, 80):
+            line = lines[i - 1]
+            for j in range(1, 12):
+                try:
+                    WORD_SET.add(line.replace('\n', '').split(' ')[j])
+                except:
+                    continue
 
 
 def get_word(sen, wor):
@@ -201,34 +209,25 @@ def check_top_k():
                 nodes = len(x)
                 total += 1
                 q = PriorityQueue()
-                for u in range(1, 80):
-                    for v in range(1, 12):
-                        w1 = get_word(u, v)
-                        if w1 is not None:
-                            d = location_distance(
-                                list(zip(x, y)),
-                                generate_standard_pattern(word, nodes))
-                            q.put((d, w1))
+                for w1 in WORD_SET:
+                    d = location_distance(
+                        list(zip(x, y)),
+                        generate_standard_pattern('g' + w1, nodes))
+                    q.put((d, w1))
                 top = []
                 # top 1
-                top.append(q.get())
+                top.append(q.get()[1])
                 if word in top:
                     top_1 += 1
                 # top 2
-                while len(top) != 2:
-                    second = q.get()
-                    if second not in top:
-                        top.append(second)
+                top.append(q.get()[1])
                 if word in top:
                     top_2 += 1
                 # top 3
-                while len(top) != 3:
-                    third = q.get()
-                    if third not in top:
-                        top.append(third)
+                top.append(q.get()[1])
                 if word in top:
                     top_3 += 1
-                print(top)
+                # print(word, top)
     print("total: %d" % total)
     print("top1 acc: %f" % (top_1 / total))
     print("top2 acc: %f" % (top_2 / total))
@@ -239,13 +238,14 @@ def show_difference():
     plt.axis('scaled')
     plt.xlim((-10, 10))
     plt.ylim((-10, 10))
-    i = random.randint(1, 80)
-    j = random.randint(1, 5)
+    # i = random.randint(1, 80)
+    # j = random.randint(1, 5)
+    i, j = 1, 1
     x, y = get_user_path("data/path_lyh", i, j)
     word = get_word(i, j)
     if word is not None and x is not None:
         print(word)
-        pattern = generate_standard_pattern(word, len(x))
+        pattern = generate_standard_pattern('g' + word, len(x))
         gx = [seg[0] for seg in pattern]
         gy = [seg[1] for seg in pattern]
         plt.scatter(x, y, c='r')
@@ -254,9 +254,11 @@ def show_difference():
 
 
 def main():
-    # show_difference()
-    check_top_k()
+    while True:
+        show_difference()
+    # check_top_k()
 
 
 if __name__ == "__main__":
+    init_word_set()
     main()
