@@ -113,9 +113,9 @@ def aggregate(data):
                 # print([points_x[i + 1], points_y[i + 1]])
                 i += 1
 
-    points_x = [points_x[i] - points_x[0] for i in range(len(points_x))]
-    points_y = [points_y[i] - points_y[0] for i in range(len(points_y))]
-    return points_x, points_y
+    # points_x = [points_x[i] - points_x[0] for i in range(len(points_x))]
+    # points_y = [points_y[i] - points_y[0] for i in range(len(points_y))]
+    return points_x, points_y, depths
 
 
 def minimum_jerk(path, word: str):
@@ -151,8 +151,7 @@ def minimum_jerk(path, word: str):
     return segments
 
 
-def generate_standard_pattern(word: str, num_nodes: int, distribute,
-                              seg_index: list):
+def generate_standard_pattern(word: str, num_nodes: int, distribute):
     nodes = []
     pattern = []
     for i, c in enumerate(word):
@@ -218,7 +217,16 @@ def dynamic_time_warping(path, pattern):
     #            interpolation='nearest')
     # plt.plot(pair[0], pair[1], 'w')
     # plt.show()
-    return d
+    return d, pair
+
+
+def normalize(x, y, x_offset, y_offset):
+    xx = np.array([0.0, *[x[i] + x_offset for i in range(len(x))], 0.0])
+    yy = np.array([0.0, *[y[i] + y_offset for i in range(len(y))], 0.0])
+    x_max, x_min = np.max(xx), np.min(xx)
+    y_max, y_min = np.max(yy), np.min(yy)
+    return xx / (x_max - x_min) / 2 if x_max - x_min != 0 else xx, yy / (
+        y_max - y_min) / 2 if y_max - y_min != 0 else yy
 
 
 def init_word_set():
@@ -301,26 +309,33 @@ def check_top_k():
     top_3 = 0
     for i in trange(1, 80):
         for j in trange(1, 12):
-            x, y = get_user_path("data/path_lyh", i, j)
+            # x, y = get_user_path("data/path_lyh", i, j)
             # x, y = get_user_path_json(name, i, j)
+            data = get_user_path_original("lyh", i, j)
+            if data is None:
+                continue
+            x, y, depths = aggregate(data)
+            x, y = normalize(x, y, -14, 16)
             word = get_word(i, j)
             if word is not None and x is not None:
                 nodes = len(x)
-                if nodes == 0:
+                if nodes < 3:
                     continue
                 total += 1
                 q = PriorityQueue()
                 for w1 in WORD_SET:
+                    pattern = generate_standard_pattern(
+                        w1, nodes - 2, lambda x: -2 * x**3 + 3 * x**2)
+                    gx = [p[0] for p in pattern]
+                    gy = [p[1] for p in pattern]
+                    gx, gy = normalize(gx, gy, 0, 0)
                     # location_distance
                     # d = location_distance(
                     #     list(zip(x, y)),
                     #     generate_standard_pattern('g' + w1, nodes))
                     # basic dtw
-                    d = dynamic_time_warping(
-                        list(zip(x, y)),
-                        generate_standard_pattern(
-                            'g' + w1 + 'g', nodes,
-                            lambda x: -2 * x**3 + 3 * x**2))
+                    d, pair = dynamic_time_warping(list(zip(x, y)),
+                                                   list(zip(gx, gy)))
                     q.put((d, w1))
                 top = []
                 # top 1
@@ -344,36 +359,44 @@ def check_top_k():
 
 def show_difference():
     plt.axis('scaled')
-    plt.xlim((-10, 10))
-    plt.ylim((-10, 10))
+    plt.xlim((-1, 1))
+    plt.ylim((-1, 1))
     i = random.randint(1, 80)
     j = random.randint(1, 5)
     # i, j = 1, 1
     # x, y = get_user_path("data/path_lyh", i, j)
     # x, y = get_user_path_json("lyh", i, j)
+    # for i in range(1, 80):
+    #     for j in range(1, 12):
     data = get_user_path_original("lyh", i, j)
     if data is None:
         return
-    x, y = aggregate(data)
+    x, y, depths = aggregate(data)
+    x, y = normalize(x, y, -14, 16)
     word = get_word(i, j)
     if word is not None:
         print(word)
-
-        pattern = generate_standard_pattern('g' + word + 'g', len(x),
+        pattern = generate_standard_pattern(word,
+                                            len(x) - 2,
                                             lambda x: -2 * x**3 + 3 * x**2)
         gx = [seg[0] for seg in pattern]
         gy = [seg[1] for seg in pattern]
+        gx, gy = normalize(gx, gy, 0, 0)
         plt.scatter(x, y, c='r')
         plt.scatter(gx, gy, c='g')
-        for i in range(len(x)):
-            plt.plot([x[i], gx[i]], [y[i], gy[i]], c='b')
+        d, pair = dynamic_time_warping(list(zip(x, y)), list(zip(gx, gy)))
+        for i in range(len(pair[0])):
+            plt.plot([x[pair[0][i]], gx[pair[1][i]]],
+                     [y[pair[0][i]], gy[pair[1][i]]],
+                     c='b')
         plt.show()
-        # dynamic_time_warping(list(zip(x, y)), list(zip(gx, gy)))
+    #         plt.scatter([x[0]], [y[0]])
+    # plt.show()
 
 
 def main():
-    while True:
-        show_difference()
+    # while True:
+    #     show_difference()
     check_top_k()
 
 
