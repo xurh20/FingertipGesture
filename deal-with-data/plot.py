@@ -90,9 +90,6 @@ def calculatePoints(data):
                 depths.insert(i, d)
                 merge_num += 1
             else:
-                # print(np.linalg.norm(np.array([points_x[i], points_y[i]]) - np.array([points_x[i + 1], points_y[i + 1]])))
-                # print([points_x[i], points_y[i]])
-                # print([points_x[i + 1], points_y[i + 1]])
                 i += 1
     return points_x, points_y, depths
 
