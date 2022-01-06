@@ -6,12 +6,11 @@ import math
 import json
 import random
 import matplotlib.pyplot as plt
-from itertools import chain
 
 from numpy.core.numeric import allclose
 from calBreak import loadRawNum, checkBreak
 
-PERSON = "xq"
+PERSON = "gww"
 BASE_DIR = "../data/alphabeta_data_"
 SAVE_DIR = "../data/saved_data_" + PERSON + "/"
 SAVE_CB_DIR = "../data/break_num/"
@@ -26,8 +25,8 @@ DOWN_BOUND = 68
 WIDTH = RIGHT_BOUND - LEFT_BOUND + 1
 HEIGHT = DOWN_BOUND - UP_BOUND + 1
 MIN_CORNER_ANGLE_FIRST = 90
-MIN_CORNER_ANGLE_MIDDLE = 75
-MIN_CORNER_ANGLE_SECOND = 60
+MIN_CORNER_ANGLE_MIDDLE = 60
+MIN_CORNER_ANGLE_SECOND = 45
 MIN_LINE_LENGTH = 0.5  # just experience
 MAX_LINE_LENGTH = 1.2
 MIN_ANGLE = 30  # 低于且两端距离过长就算行进间
@@ -35,17 +34,20 @@ MIN_PRESSURE_RATE = 0.4
 
 MIN_DISTANCE = 0.3  # 小于则合并
 
-SENTENCE = 61
+SENTENCE = 81
 WORD = 1
 
 
 def loadData(sentence, word, person):
-    data = np.load(BASE_DIR + person + "/" +
-                   str(sentence) + "_" + str(word) + ".npy")
-    return data
+    try:
+        data = np.load(BASE_DIR + person + "/" +
+                    str(sentence) + "_" + str(word) + ".npy")
+        return data
+    except:
+        return np.array([])
 
 
-def calculatePoints(data):
+def calculatePoints(data): # len(data) > 0
     points_x = []
     points_y = []
     depths = []
@@ -65,10 +67,19 @@ def calculatePoints(data):
             points_x.append(x_average)
             points_y.append(y_average)
             depths.append(sum_force)
+    # Move relatively to center
+    center_x = points_x[0]
+    center_y = points_y[0]
+    for i in range(len(points_x)):
+        points_x[i] -= center_x
+    for i in range(len(points_y)):
+        points_y[i] -= center_y
+
     # Normalize depths
     if (len(depths) > 0):
         max_depth = max(depths)
         depths = [i / max_depth for i in depths]
+
     # Merge points
     merge_num = 1
     while merge_num > 0:
@@ -242,14 +253,20 @@ def saveVideo(points_x, points_y, depths, PERSON):
 
 def calAngle(vector_1, vector_2):  # vector should be np array return degree
     try:
-        cosangle = vector_1.dot(
-            vector_2)/(np.linalg.norm(vector_1) * np.linalg.norm(vector_2))
-        angle = np.arccos(cosangle)
+        vector_1 = vector_1 / np.linalg.norm(vector_1)
+        vector_2 = vector_2 / np.linalg.norm(vector_2)
+        if (np.array_equal(vector_1, vector_2)):
+            return 0.0
+        elif (np.array_equal(vector_1, -1 * vector_2)):
+            return 180.0
+        else:
+            cosangle = vector_1.dot(
+                vector_2)/(np.linalg.norm(vector_1) * np.linalg.norm(vector_2))
+            angle = np.arccos(cosangle)
+            return math.degrees(angle)
     except:
         print(vector_1)
         print(vector_2)
-    # print(math.degrees(angle))
-    return math.degrees(angle)
 
 
 def calRadius(p1, p2, p3):
@@ -325,7 +342,6 @@ def calFirstCorner(points_x, points_y, depths):
                     cleanedCenterPointSingle = [i]
                 curr_num = i
             cleanedCenterPointGroups.append(cleanedCenterPointSingle)
-            # break long edge and remove far points
             return cleanedCenterPointGroups
         except:
             return []
@@ -438,6 +454,14 @@ def gatherCorner(centerPointGroupsFirst, centerPointGroupsSecond):
                 cleanedCenterPointSingle = [i]
             curr_num = i
         cleanedCenterPointGroups.append(cleanedCenterPointSingle)
+        # break long edge and remove far points
+        # for i in range(len(cleanedCenterPointGroups)):
+        #     for j in range(len(cleanedCenterPointGroups[i]) - 1):
+        #         point_label = cleanedCenterPointGroups[i][j]
+        #         point_1 = np.array(points_x[point_label], points_y[point_label])
+        #         point_2 = np.array(points_x[point_label + 1], points_y[point_label + 1])
+        #         # if (np.linalg.norm(point_1 - point_2) > )
+        #         print(np.linalg.norm(point_1 - point_2))
         return cleanedCenterPointGroups
     except:
         return []
