@@ -16,9 +16,9 @@ from statsmodels.stats.anova import anova_lm
 BASE_DIR = "../data/alphabeta_data_"
 PERSON = ["gww", "hxz", "ljh", "lyh", "lzp", "qlp", "tty", "xq"]
 SAVE_MP_DIR = "../data/match_points/"  # save match points
-SAVE_AD_DIR = "../data/angle_dependency_points/"  # save angle_dependency_points
-# save average angle_dependency_points
-SAVE_AVE_AD_DIR = "../data/ave_angle_dependency_points/"
+SAVE_VD_DIR = "../data/vector_dependency_points/"  # save vector_dependency_points
+# save average vector_dependency_points
+SAVE_AVE_VD_DIR = "../data/ave_vector_dependency_points/"
 STD_KB_POS = {
     'q': np.array([-474, 105]),
     'w': np.array([-370, 105]),
@@ -50,41 +50,35 @@ STD_KB_POS = {
 allPattern = cleanWords()
 
 
-def calAnglePair(person, sentence, word):
+def calVectorPair(person, sentence, word):
     # calculate angle in (sentence, word)
     # return [[],[]] first is pattern angle and second is actual angle
-    patterns = np.array(genPattern(sentence, word)).reshape(-1, 2)
-    if (len(patterns) < 2):
+    patterns = np.array(genPattern(sentence, word, False)).reshape(-1, 2)
+    if (len(patterns) < 1):
         print("word shorter than three letters, return")
         return [[], []]
     key_points = genKeyPoint(person, sentence, word)
     # print(patterns)
-    key_vectors = [
-        np.array(key_points[i + 1][0:2]) - np.array(key_points[i][0:2])
-        for i in range(len(key_points) - 1)
-    ]
+    key_vectors = [(np.array(key_points[i + 1][0:2]) -
+                    np.array(key_points[i][0:2])).tolist()
+                   for i in range(len(key_points) - 1)]
     # print(key_vectors)
-    pattern_angles = []
-    actual_angles = []
-    for i in range(len(patterns) - 1):
-        pattern_angles.append(calAngle(patterns[i], patterns[i + 1]))
-    for i in range(len(key_vectors) - 1):
-        actual_angles.append(calAngle(key_vectors[i], key_vectors[i + 1]))
-    return [pattern_angles, actual_angles]
+    return [patterns.tolist(), key_vectors]
 
 
-def saveAngleDependency():
+def saveVectorDependency():
     for person in PERSON:
         for i in range(1, 82):
             for j in range(len(allPattern[i - 1])):
                 if os.path.exists(BASE_DIR + person + "/" + str(i) + "_" +
                                   str(j) + ".npy"):
                     with open(
-                            SAVE_AD_DIR + person + "_" + str(i) + "_" +
+                            SAVE_VD_DIR + person + "_" + str(i) + "_" +
                             str(j) + ".txt", "w") as f:
                         f.write(
                             json.dumps(
-                                np.array(calAnglePair(person, i, j)).tolist()))
+                                np.array(calVectorPair(person, i,
+                                                       j)).tolist()))
                 else:
                     print("error, lost data ", person, i, j,
                           allPattern[i - 1][j])
@@ -92,26 +86,38 @@ def saveAngleDependency():
             print("done", i)
 
 
-def drawAngleDependency(person):
+def rect2polar(x, y):
+    r = np.linalg.norm(np.array([x, y]))
+    theta = np.arctan2(y, x)
+    return r, theta
+
+
+def drawVectorDependency(person):
+    fig, axes = plt.subplots(1, 2)
     xs = []
     ys = []
+    xt = []
+    yt = []
     for i in range(1, 82):
         for j in range(len(allPattern[i - 1])):
-            if os.path.exists(SAVE_AD_DIR + person + "_" + str(i) + "_" +
+            if os.path.exists(SAVE_VD_DIR + person + "_" + str(i) + "_" +
                               str(j) + ".txt"):
                 with open(
-                        SAVE_AD_DIR + person + "_" + str(i) + "_" + str(j) +
+                        SAVE_VD_DIR + person + "_" + str(i) + "_" + str(j) +
                         ".txt", "r") as f:
                     data = json.loads(f.read())
                     if (len(data[1]) > 0 and len(data[0]) == len(data[1])):
                         for d in data[0]:
-                            xs.append(d)
+                            xs.append(rect2polar(d[0], d[1])[0])
+                            xt.append(rect2polar(d[0], d[1])[1])
                         for d in data[1]:
-                            ys.append(d)
+                            ys.append(rect2polar(d[0], d[1])[0])
+                            yt.append(rect2polar(d[0], d[1])[1])
             else:
                 print("error, lost data ", person, i, j, allPattern[i - 1][j])
                 break
-    plt.scatter(xs, ys)
+    axes[0].scatter(xs, ys)
+    axes[1].scatter(xt, yt)
     plt.show()
 
 
@@ -120,10 +126,10 @@ def genCSV(person):
     ys = []
     for i in range(1, 82):
         for j in range(len(allPattern[i - 1])):
-            if os.path.exists(SAVE_AD_DIR + person + "_" + str(i) + "_" +
+            if os.path.exists(SAVE_VD_DIR + person + "_" + str(i) + "_" +
                               str(j) + ".txt"):
                 with open(
-                        SAVE_AD_DIR + person + "_" + str(i) + "_" + str(j) +
+                        SAVE_VD_DIR + person + "_" + str(i) + "_" + str(j) +
                         ".txt", "r") as f:
                     data = json.loads(f.read())
                     if (len(data[1]) > 0 and len(data[0]) == len(data[1])):
@@ -134,14 +140,14 @@ def genCSV(person):
             else:
                 print("error, lost data ", person, i, j, allPattern[i - 1][j])
                 break
-    with open(SAVE_AD_DIR + person + ".csv", "w") as f:
+    with open(SAVE_VD_DIR + person + ".csv", "w") as f:
         f.write("x,y\n")
         for i in range(len(xs)):
             f.write(str(xs[i]) + "," + str(ys[i]) + "\n")
 
 
 def anova(person):
-    file = SAVE_AD_DIR + person + ".csv"
+    file = SAVE_VD_DIR + person + ".csv"
     data = pd.read_csv(file)
     print(data)
     formula = 'y ~ x'
@@ -159,10 +165,10 @@ def genAveCSV(person, x_interval):
     ys = []
     for i in range(1, 82):
         for j in range(len(allPattern[i - 1])):
-            if os.path.exists(SAVE_AD_DIR + person + "_" + str(i) + "_" +
+            if os.path.exists(SAVE_VD_DIR + person + "_" + str(i) + "_" +
                               str(j) + ".txt"):
                 with open(
-                        SAVE_AD_DIR + person + "_" + str(i) + "_" + str(j) +
+                        SAVE_VD_DIR + person + "_" + str(i) + "_" + str(j) +
                         ".txt", "r") as f:
                     data = json.loads(f.read())
                     if (len(data[1]) > 0 and len(data[0]) == len(data[1])):
@@ -190,7 +196,7 @@ def genAveCSV(person, x_interval):
             p += 1
         ave_points.append([saved_x, np.mean(saved_y)])
     print(ave_points)
-    with open(SAVE_AVE_AD_DIR + person + ".csv", "w") as f:
+    with open(SAVE_AVE_VD_DIR + person + ".csv", "w") as f:
         f.write("x,y\n")
         for i in range(len(ave_points)):
             f.write(str(ave_points[i][0]) + "," + str(ave_points[i][1]) + "\n")
@@ -199,7 +205,7 @@ def genAveCSV(person, x_interval):
 
 
 def anovaAverage(person):  # average in x axis
-    file = SAVE_AVE_AD_DIR + person + ".csv"
+    file = SAVE_AVE_VD_DIR + person + ".csv"
     data = pd.read_csv(file)
     # print(data)
     formula = 'y ~ x'
@@ -208,10 +214,11 @@ def anovaAverage(person):  # average in x axis
 
 
 if __name__ == "__main__":
-    saveAngleDependency()
     # drawAngleDependency("xq")
     # for person in PERSON:
     #     genCSV(person)
     # anova("xq")
     # genAveCSV("tty", 5)
     # anovaAverage("tty")
+    # saveVectorDependency()
+    drawVectorDependency("tty")
