@@ -3,6 +3,7 @@ import math, random, json
 from numpy.core.numeric import Inf
 import matplotlib.pyplot as plt
 from queue import PriorityQueue
+from numpy.linalg.linalg import norm
 from tqdm import tqdm, trange
 from dtw import dtw
 from scipy.special import erf
@@ -47,11 +48,11 @@ SENT_LIMIT = 0
 WORD_LIMIT = []
 
 
-def identity(pos: tuple[float, float]):
+def identity(pos: tuple([float, float])):
     return pos
 
 
-def linear_rectangle(pos: tuple[float, float]):
+def linear_rectangle(pos: tuple([float, float])):
     center = (0, 0)
     width = 8
     height = 18
@@ -59,12 +60,12 @@ def linear_rectangle(pos: tuple[float, float]):
             center[1] + pos[1] * height / STD_KB_HEIGHT)
 
 
-def key_transform(pos: tuple[float, float]):
+def key_transform(pos: tuple([float, float])):
     return linear_rectangle(pos)
 
 
-def distance(p: tuple[float, float], q: tuple[float, float]) -> float:
-    return -np.array(p).dot(np.array(q))
+def distance(p: tuple([float, float]), q: tuple([float, float])) -> float:
+    return -np.array(p).dot(np.array(q)) / np.linalg.norm(np.array(p)) / np.linalg.norm(np.array(q)) + 0.9
 
 
 def aggregate(data):
@@ -216,7 +217,7 @@ def location_distance(path, pattern):
 
 
 def dynamic_time_warping(path, pattern):
-    d, cost_matrix, acc_cost_matrix, pair = dtw(path, pattern, dist=distance)
+    d, cost_matrix, acc_cost_matrix, pair = a_dtw(path, pattern, dist=distance)
     # plt.imshow(acc_cost_matrix.T,
     #            origin='lower',
     #            cmap='gray',
@@ -325,8 +326,8 @@ def check_top_k():
     top_2 = 0
     top_3 = 0
     for i in trange(1, SENT_LIMIT + 1):
-        for j in trange(1, WORD_LIMIT[i] + 1):
-            data = get_user_path_original("lyh", i, j)
+        for j in range(1, WORD_LIMIT[i] + 1):
+            data = get_user_path_original("qlp", i, j)
             if data is None:
                 continue
             x, y, depths = aggregate(data)
@@ -339,7 +340,7 @@ def check_top_k():
                     pattern = genPattern(clean(w1))
                     if (len(pattern) <= 0):
                         continue
-                    d, cost_matrix, acc_cost_matrix, path = dtw(user,
+                    d, cost_matrix, acc_cost_matrix, path = a_dtw(user,
                                                                 pattern,
                                                                 dist=distance)
                     # import matplotlib.pyplot as plt
