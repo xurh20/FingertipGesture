@@ -134,9 +134,20 @@ def genCSV(person):
                     data = json.loads(f.read())
                     if (len(data[1]) > 0 and len(data[0]) == len(data[1])):
                         for d in data[0]:
-                            xs.append(d)
+                            xs.append(rect2polar(d[0], d[1])[0])
                         for d in data[1]:
-                            ys.append(d)
+                            ys.append(rect2polar(d[0], d[1])[0])
+                        # for k in range(len(data[0])):
+                        #     if rect2polar(data[0][k][0],
+                        #                   data[0][k][1])[1] > 0 and rect2polar(
+                        #                       data[0][k][0],
+                        #                       data[0][k][1])[1] < 3.14:
+                        #         xs.append(
+                        #             rect2polar(data[0][k][0],
+                        #                        data[0][k][1])[1])
+                        #         ys.append(
+                        #             rect2polar(data[1][k][0],
+                        #                        data[1][k][1])[1])
             else:
                 print("error, lost data ", person, i, j, allPattern[i - 1][j])
                 break
@@ -153,11 +164,9 @@ def anova(person):
     formula = 'y ~ x'
     ols_results = ols(formula, data).fit()
     print(ols_results.summary())
-    # fig = plt.figure(figsize=(15, 8))
-    # fig = graphics.plot_regress_exog(ols_results,
-    #                                 "np.log2(Distance / Width + 1)",
-    #                                 fig=fig)
-    # plt.show()
+    fig = plt.figure(figsize=(15, 8))
+    fig = graphics.plot_regress_exog(ols_results, "x", fig=fig)
+    plt.show()
 
 
 def genAveCSV(person, x_interval):
@@ -218,7 +227,7 @@ if __name__ == "__main__":
     # for person in PERSON:
     #     genCSV(person)
     # anova("xq")
-    # genAveCSV("tty", 5)
-    # anovaAverage("tty")
+    genCSV("lyh")
+    anova("lyh")
     # saveVectorDependency()
-    drawVectorDependency("tty")
+    # drawVectorDependency("tty")

@@ -70,16 +70,17 @@ def genPoints(points_x, points_y, depths):
     return points
 
 
-def genVectors(points_x, points_y, depths):
+def genVectors(points_x, points_y, depths, normalized=True):
     vectors = []
     points = genPoints(points_x, points_y, depths)
     # calculate vector
-    if (len(points) == 1):
-        print("error only one point")
+    # if (len(points) == 1):
+    #     print("error only one point")
     for i in range(1, len(points)):
         v = np.array(
             [points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]])
-        v = v / np.linalg.norm(v)
+        if (normalized):
+            v = v / np.linalg.norm(v)
         vectors.append(v)
     return vectors
 
@@ -101,8 +102,8 @@ def genPattern(sentence, word, normalized=True):
 
 
 def genPattern(word, normalized=True):
-    if (len(word) == 1):
-        print("error genpattern with only one word")
+    # if (len(word) == 1):
+    #     print("error genpattern with only one word")
     patterns = []
     for i in range(len(word) - 1):
         v = linear_rectangle(STD_KB_POS[lowerCase(

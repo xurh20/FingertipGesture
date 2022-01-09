@@ -65,7 +65,18 @@ def key_transform(pos: tuple([float, float])):
 
 
 def distance(p: tuple([float, float]), q: tuple([float, float])) -> float:
-    return -np.array(p).dot(np.array(q)) / np.linalg.norm(np.array(p)) / np.linalg.norm(np.array(q)) + 0.9
+    return modulus_distance(p, q)
+
+
+def theta_distance(p: tuple([float, float]), q: tuple([float,
+                                                       float])) -> float:
+    return -np.array(p).dot(np.array(q)) / np.linalg.norm(
+        np.array(p)) / np.linalg.norm(np.array(q)) + 0.9
+
+
+def modulus_distance(p: tuple([float, float]), q: tuple([float,
+                                                         float])) -> float:
+    return np.abs(np.linalg.norm(q) * 0.8 + 4 - np.linalg.norm(p))
 
 
 def aggregate(data):
@@ -325,24 +336,24 @@ def check_top_k():
     top_1 = 0
     top_2 = 0
     top_3 = 0
-    for i in trange(1, SENT_LIMIT + 1):
-        for j in range(1, WORD_LIMIT[i] + 1):
+    for i in trange(1, SENT_LIMIT):
+        for j in range(0, WORD_LIMIT[i]):
             data = get_user_path_original("qlp", i, j)
             if data is None:
                 continue
             x, y, depths = aggregate(data)
-            user = genVectors(x, y, depths)
+            user = genVectors(x, y, depths, False)
             word = get_word(i, j)
+
             if word is not None and x is not None:
                 total += 1
                 q = PriorityQueue()
                 for w1 in WORD_SET:
-                    pattern = genPattern(clean(w1))
-                    if (len(pattern) <= 0):
+                    pattern = genPattern(clean('g' + w1), False)
+                    if (len(user) <= 0 or len(pattern) <= 0):
                         continue
-                    d, cost_matrix, acc_cost_matrix, path = a_dtw(user,
-                                                                pattern,
-                                                                dist=distance)
+                    d, cost_matrix, acc_cost_matrix, path = a_dtw(
+                        user, pattern, dist=distance)
                     # import matplotlib.pyplot as plt
 
                     # plt.imshow(acc_cost_matrix.T,
@@ -352,20 +363,26 @@ def check_top_k():
                     # plt.plot(path[0], path[1], 'w')
                     # plt.show()
                     q.put((d, w1))
+                if (q.qsize() < 1):
+                    continue
                 top = []
                 # top 1
                 top.append(q.get()[1])
                 if word in top:
                     top_1 += 1
+                if (q.qsize() < 2):
+                    continue
                 # top 2
                 top.append(q.get()[1])
                 if word in top:
                     top_2 += 1
+                if (q.qsize() < 3):
+                    continue
                 # top 3
                 top.append(q.get()[1])
                 if word in top:
                     top_3 += 1
-                print(word, top)
+                # print(word, top)
     print("total: %d" % total)
     print("top1 acc: %f" % (top_1 / total))
     print("top2 acc: %f" % (top_2 / total))
@@ -418,5 +435,5 @@ def main():
 if __name__ == "__main__":
     init_word_set()
     print("using set size: ", len(WORD_SET))
-    # print(WORD_SET)
+    # print(SENT_LIMIT, len(WORD_LIMIT))
     main()
