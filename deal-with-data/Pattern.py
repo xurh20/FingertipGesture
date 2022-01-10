@@ -41,6 +41,37 @@ STD_KB_POS = {
     'm': (232, -105)
 }
 
+ANA_KB_WIDTH = 8
+ANA_KB_HEIGHT = 8
+ANA_KB_POS = {
+    'a': (-3.60647363, -0.63834205),
+    'b': (-0.36606605, -5.12443623),
+    'c': (-1.47231184, -4.23960535),
+    'd': (-1.9210401, -0.62426094),
+    'e': (-2.39354782, 2.39488218),
+    'f': (-1.79432936, -0.88401021),
+    'g': (-1.43803671, 0.01432068),
+    'h': (0.860294, -1.6729026),
+    'i': (2.03130594, 2.3622898),
+    'j': (1.00236296, -0.75739284),
+    'k': (1.90240149, -0.31155476),
+    'l': (2.49140859, -0.97244246),
+    'm': (1.56049504, -4.53376199),
+    'n': (0.45920625, -4.39645984),
+    'o': (2.61070786, 1.83023801),
+    'p': (3.07807985, 1.60002022),
+    'q': (-3.61720778, 1.77148202),
+    'r': (-0.8815241, 2.25594157),
+    's': (-2.83912263, -0.91653282),
+    't': (-0.84827485, 2.5858369),
+    'u': (0.35521257, 2.05379052),
+    'v': (-0.71334268, -4.39406909),
+    'w': (-2.86616848, 1.76756366),
+    'x': (-2.23156079, -3.50692019),
+    'y': (-0.18780098, 2.51398159),
+    'z': (-3.25208095, -4.35824647)
+}
+
 WORD_SET = set()
 PERSON = ["gww", "hxz", "ljh", "lyh", "lzp", "qlp", "tty", "xq"]
 global SENT_LIMIT, WORD_LIMIT
@@ -53,11 +84,12 @@ def identity(pos: tuple([float, float])):
 
 
 def linear_rectangle(pos: tuple([float, float])):
-    center = (0, 0)
+    # center = (0, 0)
+    center = (-1.43803671, 0.01432068)
     width = 8
-    height = 18
-    return (center[0] + pos[0] * width / STD_KB_WIDTH,
-            center[1] + pos[1] * height / STD_KB_HEIGHT)
+    height = 8
+    return (center[0] + pos[0] * width / ANA_KB_WIDTH,
+            center[1] + pos[1] * height / ANA_KB_HEIGHT)
 
 
 def key_transform(pos: tuple([float, float])):
@@ -65,7 +97,7 @@ def key_transform(pos: tuple([float, float])):
 
 
 def distance(p: tuple([float, float]), q: tuple([float, float])) -> float:
-    return modulus_distance(p, q)
+    return theta_distance(p, q)
 
 
 def theta_distance(p: tuple([float, float]), q: tuple([float,
@@ -77,6 +109,11 @@ def theta_distance(p: tuple([float, float]), q: tuple([float,
 def modulus_distance(p: tuple([float, float]), q: tuple([float,
                                                          float])) -> float:
     return np.abs(np.linalg.norm(q) * 0.8 + 4 - np.linalg.norm(p))
+
+
+def euclidian_distance(p: tuple([float, float]), q: tuple([float,
+                                                           float])) -> float:
+    return np.linalg.norm(np.array(p) - np.array(q))
 
 
 def aggregate(data):
@@ -175,19 +212,19 @@ def generate_standard_pattern(word: str, num_nodes: int, distribute):
     for i, c in enumerate(word):
         if (i > 0 and word[i] == word[i - 1]):
             continue
-        nodes.append(key_transform(STD_KB_POS[c]))
+        nodes.append(key_transform(ANA_KB_POS[c]))
     if len(nodes) == 1:
         return [nodes[0] for i in range(num_nodes)]
     total_len = 0
     for i in range(len(nodes) - 1):
-        total_len += distance(nodes[i], nodes[i + 1])
+        total_len += euclidian_distance(nodes[i], nodes[i + 1])
     num_pieces = num_nodes - 1
     used_pieces = 0
     for i in range(len(nodes) - 1):
         if i == len(nodes) - 2:
             p1 = num_pieces - used_pieces
         else:
-            d1 = distance(nodes[i], nodes[i + 1])
+            d1 = euclidian_distance(nodes[i], nodes[i + 1])
             p1 = int(d1 * num_pieces / total_len)
         if p1 == 0:
             continue
@@ -199,7 +236,7 @@ def generate_standard_pattern(word: str, num_nodes: int, distribute):
         used_pieces += p1
     pattern.append(nodes[-1])
     if len(pattern) != num_nodes:
-        print(word, num_nodes)
+        print(word, num_nodes, len(pattern))
         raise Exception()
     return pattern
 
@@ -238,13 +275,10 @@ def dynamic_time_warping(path, pattern):
     return d, pair
 
 
-def normalize(x, y, x_offset, y_offset):
-    xx = np.array([0.0, *[x[i] + x_offset for i in range(len(x))], 0.0])
-    yy = np.array([0.0, *[y[i] + y_offset for i in range(len(y))], 0.0])
-    x_max, x_min = np.max(xx), np.min(xx)
-    y_max, y_min = np.max(yy), np.min(yy)
-    return xx / (x_max - x_min) / 2 if x_max - x_min != 0 else xx, yy / (
-        y_max - y_min) / 2 if y_max - y_min != 0 else yy
+def centerize(x, y):
+    xx = [x[i] - x[0] for i in range(len(x))]
+    yy = [y[i] - y[0] for i in range(len(y))]
+    return xx, yy
 
 
 def init_word_set():
@@ -331,14 +365,56 @@ def draw_mininum_jerk(path_dir, sentence, piece):
     plt.show()
 
 
-def check_top_k():
+def get_top_k(person, k):
+    top_k = [[]]
+    for i in trange(1, SENT_LIMIT):
+        top_k_i = []
+        for j in range(0, WORD_LIMIT[i]):
+            data = get_user_path_original(person, i, j)
+            if data is None:
+                continue
+            x, y, depths = aggregate(data)
+            user = genVectors(x, y, depths, False)
+            word = get_word(i, j)
+
+            if word is not None and x is not None:
+                q = PriorityQueue()
+                for w1 in WORD_SET:
+                    pattern = genPattern(clean('g' + w1), False)
+                    if (len(user) <= 0 or len(pattern) <= 0):
+                        continue
+                    d, cost_matrix, acc_cost_matrix, path = a_dtw(
+                        user, pattern, dist=distance)
+                    # import matplotlib.pyplot as plt
+
+                    # plt.imshow(acc_cost_matrix.T,
+                    #            origin='lower',
+                    #            cmap='gray',
+                    #            interpolation='nearest')
+                    # plt.plot(path[0], path[1], 'w')
+                    # plt.show()
+                    q.put((d, w1))
+                top = []
+                for p in range(k):
+                    try:
+                        tmp = q.get_nowait()
+                        top.append(tmp[1])
+                        if word in top:
+                            top_k[p] += 1
+                    except:
+                        break
+                # print(word, top)
+                top_k_i.append(top)
+        top_k.append(top_k_i)
+    return top_k
+
+
+def check_top_k(person, k):
     total = 0
-    top_1 = 0
-    top_2 = 0
-    top_3 = 0
+    top_k = [0] * k
     for i in trange(1, SENT_LIMIT):
         for j in range(0, WORD_LIMIT[i]):
-            data = get_user_path_original("qlp", i, j)
+            data = get_user_path_original(person, i, j)
             if data is None:
                 continue
             x, y, depths = aggregate(data)
@@ -363,73 +439,167 @@ def check_top_k():
                     # plt.plot(path[0], path[1], 'w')
                     # plt.show()
                     q.put((d, w1))
-                if (q.qsize() < 1):
-                    continue
                 top = []
-                # top 1
-                top.append(q.get()[1])
-                if word in top:
-                    top_1 += 1
-                if (q.qsize() < 2):
-                    continue
-                # top 2
-                top.append(q.get()[1])
-                if word in top:
-                    top_2 += 1
-                if (q.qsize() < 3):
-                    continue
-                # top 3
-                top.append(q.get()[1])
-                if word in top:
-                    top_3 += 1
+                for p in range(k):
+                    try:
+                        tmp = q.get_nowait()
+                        top.append(tmp[1])
+                        # if word in top:
+                        #     top_k[p] += 1
+                    except:
+                        break
                 # print(word, top)
+
+                q1 = PriorityQueue()
+                for w2 in top:
+                    path = list(zip(x, y))
+                    pattern = generate_standard_pattern(
+                        clean('g' + w2), len(path),
+                        lambda x: -2 * x**3 + 3 * x**2)
+                    if (len(path) <= 0 or len(pattern) <= 0):
+                        continue
+                    d, cost_matrix, acc_cost_matrix, path = dtw(
+                        path, pattern, dist=euclidian_distance)
+                    # import matplotlib.pyplot as plt
+
+                    # plt.imshow(acc_cost_matrix.T,
+                    #            origin='lower',
+                    #            cmap='gray',
+                    #            interpolation='nearest')
+                    # plt.plot(path[0], path[1], 'w')
+                    # plt.show()
+                    q1.put((d, w2))
+                topp = []
+                for p in range(k):
+                    try:
+                        tmp = q1.get_nowait()
+                        topp.append(tmp[1])
+                        if word in topp:
+                            top_k[p] += 1
+                    except:
+                        break
+                print(word, topp)
     print("total: %d" % total)
-    print("top1 acc: %f" % (top_1 / total))
-    print("top2 acc: %f" % (top_2 / total))
-    print("top3 acc: %f" % (top_3 / total))
+    for i in range(k):
+        print("top%d acc: %f" % (i + 1, top_k[i] / total))
 
 
 def show_difference():
-    plt.axis('scaled')
-    plt.xlim((-1, 1))
-    plt.ylim((-1, 1))
+    k = 50
     i = random.randint(1, 80)
     j = random.randint(1, 5)
-    # i, j = 1, 1
-    # x, y = get_user_path("data/path_lyh", i, j)
-    # x, y = get_user_path_json("lyh", i, j)
-    # for i in range(1, 80):
-    #     for j in range(1, 12):
-    data = get_user_path_original("lyh", i, j)
+    data = get_user_path_original("qlp", i, j)
     if data is None:
         return
     x, y, depths = aggregate(data)
-    x, y = normalize(x, y, -14, 16)
+    user = genVectors(x, y, depths, False)
     word = get_word(i, j)
-    if word is not None:
-        print(word)
-        pattern = generate_standard_pattern(word,
-                                            len(x) - 2,
-                                            lambda x: -2 * x**3 + 3 * x**2)
-        gx = [seg[0] for seg in pattern]
-        gy = [seg[1] for seg in pattern]
-        gx, gy = normalize(gx, gy, 0, 0)
-        plt.scatter(x, y, c='r')
-        plt.scatter(gx, gy, c='g')
-        d, pair = dynamic_time_warping(list(zip(x, y)), list(zip(gx, gy)))
-        for i in range(len(pair[0])):
-            plt.plot([x[pair[0][i]], gx[pair[1][i]]],
-                     [y[pair[0][i]], gy[pair[1][i]]],
-                     c='b')
+
+    if word is not None and x is not None:
+        q = PriorityQueue()
+        for w1 in WORD_SET:
+            pattern = genPattern(clean('g' + w1), False)
+            if (len(user) <= 0 or len(pattern) <= 0):
+                continue
+            d, cost_matrix, acc_cost_matrix, path = a_dtw(user,
+                                                          pattern,
+                                                          dist=distance)
+            # import matplotlib.pyplot as plt
+
+            # plt.imshow(acc_cost_matrix.T,
+            #            origin='lower',
+            #            cmap='gray',
+            #            interpolation='nearest')
+            # plt.plot(path[0], path[1], 'w')
+            # plt.show()
+            q.put((d, w1))
+        if (q.qsize() < 1):
+            return
+        top = []
+        for p in range(k):
+            try:
+                tmp = q.get_nowait()
+                top.append(tmp[1])
+                # if word in top:
+                #     top_k[p] += 1
+            except:
+                break
+
+        q1 = PriorityQueue()
+        user_path_x, user_path_y = centerize(x, y)
+        user_path = list(zip(user_path_x, user_path_y))
+        for w2 in top:
+            pattern = generate_standard_pattern(clean('g' + w2),
+                                                len(user_path),
+                                                lambda x: -2 * x**3 + 3 * x**2)
+            if (len(user_path) <= 0 or len(pattern) <= 0):
+                continue
+            d, cost_matrix, acc_cost_matrix, path = dtw(
+                user_path, pattern, dist=euclidian_distance)
+            # import matplotlib.pyplot as plt
+
+            # plt.imshow(acc_cost_matrix.T,
+            #            origin='lower',
+            #            cmap='gray',
+            #            interpolation='nearest')
+            # plt.plot(path[0], path[1], 'w')
+            # plt.show()
+            q1.put((d, w2))
+        topp = []
+        for p in range(k):
+            try:
+                tmp = q1.get_nowait()
+                topp.append(tmp[1])
+            except:
+                break
+        print(word, topp[0])
+
+        plt.scatter(user_path_x, user_path_y, c='black')
+
+        # ux, uy = 0, 0
+        # uxs, uys = [0], [0]
+        # for u in user:
+        #     ux += u[0]
+        #     uy += u[1]
+        #     uxs.append(ux)
+        #     uys.append(uy)
+        # plt.plot(uxs, uys, color='red')
+
+        # pred = topp[0]
+        # pred = genPattern(clean('g' + pred), False)
+        # ux, uy = 0, 0
+        # uxs, uys = [0], [0]
+        # for u in pred:
+        #     ux += u[0]
+        #     uy += u[1]
+        #     uxs.append(ux)
+        #     uys.append(uy)
+        # plt.plot(uxs, uys, color='green')
+
+        # answ = word
+        # answ = genPattern(clean('g' + answ), False)
+        # ux, uy = 0, 0
+        # uxs, uys = [0], [0]
+        # for u in answ:
+        #     ux += u[0]
+        #     uy += u[1]
+        #     uxs.append(ux)
+        #     uys.append(uy)
+        # plt.plot(uxs, uys, color='blue')
+
+        s_pattern = generate_standard_pattern(clean('g' + word), len(x),
+                                              lambda x: -2 * x**3 + 3 * x**2)
+        sx = [s[0] for s in s_pattern]
+        sy = [s[1] for s in s_pattern]
+        plt.scatter(sx, sy, color='yellow')
+
         plt.show()
-    #         plt.scatter([x[0]], [y[0]])
-    # plt.show()
 
 
 def main():
-    # while True:
-    #     show_difference()
-    check_top_k()
+    while True:
+        show_difference()
+    # check_top_k("qlp", 50)
 
 
 if __name__ == "__main__":
