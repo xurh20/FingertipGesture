@@ -88,8 +88,8 @@ def linear_rectangle(pos: tuple([float, float])):
     center = (-1.43803671, 0.01432068)
     width = 8
     height = 8
-    return (center[0] + pos[0] * width / ANA_KB_WIDTH,
-            center[1] + pos[1] * height / ANA_KB_HEIGHT)
+    return (center[0] + pos[0] * width / STD_KB_WIDTH,
+            center[1] + pos[1] * height / STD_KB_HEIGHT)
 
 
 def key_transform(pos: tuple([float, float])):
@@ -212,7 +212,7 @@ def generate_standard_pattern(word: str, num_nodes: int, distribute):
     for i, c in enumerate(word):
         if (i > 0 and word[i] == word[i - 1]):
             continue
-        nodes.append(key_transform(ANA_KB_POS[c]))
+        nodes.append(key_transform(STD_KB_POS[c]))
     if len(nodes) == 1:
         return [nodes[0] for i in range(num_nodes)]
     total_len = 0
@@ -276,8 +276,16 @@ def dynamic_time_warping(path, pattern):
 
 
 def centerize(x, y):
-    xx = [x[i] - x[0] for i in range(len(x))]
-    yy = [y[i] - y[0] for i in range(len(y))]
+    x_avg = np.average(np.array(x))
+    y_avg = np.average(np.array(y))
+    r_max = np.max(
+        np.array([
+            np.linalg.norm(np.array([x[i] - x_avg, y[i] - y_avg]))
+            for i in range(len(x))
+        ]))
+    xx = [(x[i] - x_avg) / r_max for i in range(len(x))]
+    yy = [(y[i] - y_avg) / r_max for i in range(len(y))]
+
     return xx, yy
 
 
@@ -451,15 +459,20 @@ def check_top_k(person, k):
                 # print(word, top)
 
                 q1 = PriorityQueue()
+                user_path_x, user_path_y = centerize(x, y)
+                user_path = list(zip(user_path_x, user_path_y))
                 for w2 in top:
-                    path = list(zip(x, y))
                     pattern = generate_standard_pattern(
-                        clean('g' + w2), len(path),
+                        clean('g' + w2), len(user_path),
                         lambda x: -2 * x**3 + 3 * x**2)
-                    if (len(path) <= 0 or len(pattern) <= 0):
+                    if (len(user_path) <= 0 or len(pattern) <= 0):
                         continue
+                    px = [p[0] for p in pattern]
+                    py = [p[1] for p in pattern]
+                    px, py = centerize(px, py)
+                    pattern = list(zip(px, py))
                     d, cost_matrix, acc_cost_matrix, path = dtw(
-                        path, pattern, dist=euclidian_distance)
+                        user_path, pattern, dist=euclidian_distance)
                     # import matplotlib.pyplot as plt
 
                     # plt.imshow(acc_cost_matrix.T,
@@ -478,7 +491,7 @@ def check_top_k(person, k):
                             top_k[p] += 1
                     except:
                         break
-                print(word, topp)
+                # print(word, topp)
     print("total: %d" % total)
     for i in range(k):
         print("top%d acc: %f" % (i + 1, top_k[i] / total))
@@ -534,6 +547,10 @@ def show_difference():
                                                 lambda x: -2 * x**3 + 3 * x**2)
             if (len(user_path) <= 0 or len(pattern) <= 0):
                 continue
+            px = [p[0] for p in pattern]
+            py = [p[1] for p in pattern]
+            px, py = centerize(px, py)
+            pattern = list(zip(px, py))
             d, cost_matrix, acc_cost_matrix, path = dtw(
                 user_path, pattern, dist=euclidian_distance)
             # import matplotlib.pyplot as plt
@@ -591,15 +608,16 @@ def show_difference():
                                               lambda x: -2 * x**3 + 3 * x**2)
         sx = [s[0] for s in s_pattern]
         sy = [s[1] for s in s_pattern]
+        sx, sy = centerize(sx, sy)
         plt.scatter(sx, sy, color='yellow')
 
         plt.show()
 
 
 def main():
-    while True:
-        show_difference()
-    # check_top_k("qlp", 50)
+    # while True:
+    #     show_difference()
+    check_top_k("qlp", 50)
 
 
 if __name__ == "__main__":
