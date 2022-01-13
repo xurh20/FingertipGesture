@@ -7,8 +7,13 @@ from numpy.linalg.linalg import norm
 from tqdm import tqdm, trange
 from dtw import dtw
 from scipy.special import erf
-from match import genVectors, genPattern, a_dtw
+from match import genVectors, genPattern, a_dtw, genPointLabels
 from cleanWords import clean
+from scipy.spatial.distance import cdist
+from math import sqrt
+from fastdtw import fastdtw
+from multiprocessing import Pool, Manager
+from functools import partial, wraps
 
 STD_KB_WIDTH = 1083
 STD_KB_HEIGHT = 351
@@ -77,6 +82,12 @@ PERSON = ["gww", "hxz", "ljh", "lyh", "lzp", "qlp", "tty", "xq"]
 global SENT_LIMIT, WORD_LIMIT
 SENT_LIMIT = 0
 WORD_LIMIT = []
+global THETA_PATTERN, DIST_PATTERN
+THETA_PATTERN = {}
+DIST_PATTERN = {}
+global WORD_PROB, BIWORD_PROB
+WORD_PROB = {}
+BIWORD_PROB = {}
 
 
 def identity(pos: tuple([float, float])):
@@ -88,8 +99,10 @@ def linear_rectangle(pos: tuple([float, float])):
     center = (-1.43803671, 0.01432068)
     width = 8
     height = 8
-    return (center[0] + pos[0] * width / STD_KB_WIDTH,
-            center[1] + pos[1] * height / STD_KB_HEIGHT)
+    return np.array([
+        center[0] + pos[0] * width / STD_KB_WIDTH,
+        center[1] + pos[1] * height / STD_KB_HEIGHT
+    ])
 
 
 def key_transform(pos: tuple([float, float])):
@@ -97,11 +110,14 @@ def key_transform(pos: tuple([float, float])):
 
 
 def distance(p: tuple([float, float]), q: tuple([float, float])) -> float:
-    return theta_distance(p, q)
+    return theta_distance(p, q, True)
 
 
-def theta_distance(p: tuple([float, float]), q: tuple([float,
-                                                       float])) -> float:
+def theta_distance(p: tuple([float, float]),
+                   q: tuple([float, float]),
+                   normalized=False) -> float:
+    if normalized:
+        return -np.array(p).dot(np.array(q)) + 0.9
     return -np.array(p).dot(np.array(q)) / np.linalg.norm(
         np.array(p)) / np.linalg.norm(np.array(q)) + 0.9
 
@@ -111,9 +127,10 @@ def modulus_distance(p: tuple([float, float]), q: tuple([float,
     return np.abs(np.linalg.norm(q) * 0.8 + 4 - np.linalg.norm(p))
 
 
-def euclidian_distance(p: tuple([float, float]), q: tuple([float,
-                                                           float])) -> float:
-    return np.linalg.norm(np.array(p) - np.array(q))
+def euclidean_distance(p: np.ndarray, q: np.ndarray) -> float:
+    # return np.linalg.norm(p - q)
+    # return cdist(p, q)
+    return sqrt((p[0] - q[0])**2 + (p[1] - q[1])**2)
 
 
 def aggregate(data):
@@ -217,28 +234,31 @@ def generate_standard_pattern(word: str, num_nodes: int, distribute):
         return [nodes[0] for i in range(num_nodes)]
     total_len = 0
     for i in range(len(nodes) - 1):
-        total_len += euclidian_distance(nodes[i], nodes[i + 1])
+        total_len += euclidean_distance(nodes[i], nodes[i + 1])
     num_pieces = num_nodes - 1
     used_pieces = 0
     for i in range(len(nodes) - 1):
         if i == len(nodes) - 2:
             p1 = num_pieces - used_pieces
         else:
-            d1 = euclidian_distance(nodes[i], nodes[i + 1])
+            d1 = euclidean_distance(nodes[i], nodes[i + 1])
             p1 = int(d1 * num_pieces / total_len)
         if p1 == 0:
             continue
         delta_x = nodes[i + 1][0] - nodes[i][0]
         delta_y = nodes[i + 1][1] - nodes[i][1]
         for j in range(0, p1):
-            pattern.append((nodes[i][0] + delta_x * distribute(j / p1),
-                            nodes[i][1] + delta_y * distribute(j / p1)))
+            pattern.append(
+                np.array([
+                    nodes[i][0] + delta_x * distribute(j / p1),
+                    nodes[i][1] + delta_y * distribute(j / p1)
+                ]))
         used_pieces += p1
     pattern.append(nodes[-1])
     if len(pattern) != num_nodes:
         print(word, num_nodes, len(pattern))
         raise Exception()
-    return pattern
+    return np.array(pattern)
 
 
 def location_distance(path, pattern):
@@ -289,17 +309,34 @@ def centerize(x, y):
     return xx, yy
 
 
+def downsample(x, y, depths, step=2):
+    pointLabels = genPointLabels(x, y, depths)
+    xx = []
+    yy = []
+    if len(pointLabels) == 1:
+        for i in range(0, len(x), step):
+            xx.append(x[i])
+            yy.append(y[i])
+    else:
+        for s, t in list(zip(pointLabels, pointLabels[1:])):
+            for i in range(s, t, step):
+                xx.append(x[i])
+                yy.append(y[i])
+        xx.append(x[-1])
+        yy.append(y[-1])
+    return np.array(xx), np.array(yy)
+
+
 def init_word_set():
-    global SENT_LIMIT, WORD_LIMIT
-    with open("../data/phrases2.txt", 'r') as file:
+    global SENT_LIMIT, WORD_LIMIT, WORD_PROB
+    with open("../data/words_10000.txt", 'r') as file:
         lines = file.readlines()
         for i in range(len(lines)):
-            line = lines[i].lower().replace('\n', '').split(' ')
-            for j in range(len(line)):
-                try:
-                    WORD_SET.add(line[j])
-                except:
-                    continue
+            word = lines[i].lower().replace('\n', '').split('\t')[0]
+            prob = float(lines[i].lower().replace('\n', '').split('\t')[2])
+            WORD_SET.add(word)
+            WORD_PROB[word] = prob
+
     with open("../data/voc.txt", 'r') as file:
         lines = file.readlines()
         SENT_LIMIT = len(lines) + 1
@@ -307,9 +344,37 @@ def init_word_set():
         for i in range(len(lines)):
             line = lines[i].replace('\n', '').split(' ')
             WORD_LIMIT.append(len(line))
-            for j in range(len(line)):
-                if (line[j] not in WORD_SET):
-                    print(line[j])
+            # for j in range(len(line)):
+            #     if (line[j] not in WORD_SET):
+            #         print(line[j])
+
+
+def init_pattern_set():
+    global THETA_PATTERN, DIST_PATTERN
+    for w in WORD_SET:
+        THETA_PATTERN[w] = np.array(genPattern(clean('g' + w)))
+
+        dist_path = generate_standard_pattern(
+            clean('g' + w), int((len(w) * 6.6457 + 4.2080) / 2),
+            lambda x: -2 * x**3 + 3 * x**2)
+        dist_path_x = [d[0] for d in dist_path]
+        dist_path_y = [d[1] for d in dist_path]
+        dist_path_x, dist_path_y = centerize(dist_path_x, dist_path_y)
+        DIST_PATTERN[w] = list(zip(dist_path_x, dist_path_y))
+
+
+def init_language_model():
+    global WORD_PROB, BIWORD_PROB
+    with open("../data/bigrams-written-katz.txt", 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            l = line.replace('\n', '').split(' ')
+            if l[0] not in BIWORD_PROB:
+                BIWORD_PROB[l[0]] = {}
+            try:
+                BIWORD_PROB[l[0]][l[1]] = float(l[2])
+            except:
+                continue
 
 
 def get_word(sen, wor):
@@ -417,81 +482,89 @@ def get_top_k(person, k):
     return top_k
 
 
+def calculate_dtw(user_path, d1, w2, pattern, l):
+    if (len(user_path) <= 0 or len(pattern) <= 0):
+        return
+    d, path = fastdtw(user_path, pattern, radius=1, dist=euclidean_distance)
+    l.append((d1 + 0.1 * d, w2))
+
+
 def check_top_k(person, k):
+
     total = 0
     top_k = [0] * k
-    for i in trange(1, SENT_LIMIT):
+    for i in trange(2, 24):
+        prev = None
         for j in range(0, WORD_LIMIT[i]):
             data = get_user_path_original(person, i, j)
             if data is None:
                 continue
             x, y, depths = aggregate(data)
-            user = genVectors(x, y, depths, False)
+            user = genVectors(x, y, depths)
             word = get_word(i, j)
 
-            if word is not None and x is not None:
+            if word in WORD_SET and x is not None:
                 total += 1
-                q = PriorityQueue()
+                l = []
                 for w1 in WORD_SET:
-                    pattern = genPattern(clean('g' + w1), False)
+                    pattern = THETA_PATTERN[w1]
                     if (len(user) <= 0 or len(pattern) <= 0):
                         continue
                     d, cost_matrix, acc_cost_matrix, path = a_dtw(
                         user, pattern, dist=distance)
-                    # import matplotlib.pyplot as plt
+                    l.append((d, w1))
 
-                    # plt.imshow(acc_cost_matrix.T,
-                    #            origin='lower',
-                    #            cmap='gray',
-                    #            interpolation='nearest')
-                    # plt.plot(path[0], path[1], 'w')
-                    # plt.show()
-                    q.put((d, w1))
+                x, y = downsample(x, y, depths, 2)
+                user_path_x, user_path_y = centerize(x, y)
+                user_path = np.array(list(zip(user_path_x, user_path_y)))
+
+                # manager = Manager()
+                # ll = manager.list()
+                # pool = Pool(processes=4)
+                # for d1, w2 in l:
+                #     pool.apply_async(calculate_dtw, (
+                #         user_path,
+                #         d1,
+                #         w2,
+                #         DIST_PATTERN[w2],
+                #         ll,
+                #     ))
+                # pool.close()
+                # pool.join()
+
+                ll = []
+                for d1, w2 in l:
+                    pattern = DIST_PATTERN[w2]
+                    if (len(user_path) <= 0 or len(pattern) <= 0):
+                        continue
+                    d, path = fastdtw(user_path,
+                                      pattern,
+                                      radius=1,
+                                      dist=euclidean_distance)
+                    ll.append((d1 + 0.1 * d, w2))
+
+                q = PriorityQueue()
+                for d2, w3 in ll:
+                    if prev in BIWORD_PROB and w3 in BIWORD_PROB[prev]:
+                        d = BIWORD_PROB[prev][w3]
+                    elif w3 in WORD_PROB:
+                        d = WORD_PROB[w3]
+                    else:
+                        d = 10**(-10)
+
+                    q.put((d2 - 0.1 * np.log(d), w3))
+
                 top = []
                 for p in range(k):
                     try:
                         tmp = q.get_nowait()
                         top.append(tmp[1])
-                        # if word in top:
-                        #     top_k[p] += 1
-                    except:
-                        break
-                # print(word, top)
-
-                q1 = PriorityQueue()
-                user_path_x, user_path_y = centerize(x, y)
-                user_path = list(zip(user_path_x, user_path_y))
-                for w2 in top:
-                    pattern = generate_standard_pattern(
-                        clean('g' + w2), len(user_path),
-                        lambda x: -2 * x**3 + 3 * x**2)
-                    if (len(user_path) <= 0 or len(pattern) <= 0):
-                        continue
-                    px = [p[0] for p in pattern]
-                    py = [p[1] for p in pattern]
-                    px, py = centerize(px, py)
-                    pattern = list(zip(px, py))
-                    d, cost_matrix, acc_cost_matrix, path = dtw(
-                        user_path, pattern, dist=euclidian_distance)
-                    # import matplotlib.pyplot as plt
-
-                    # plt.imshow(acc_cost_matrix.T,
-                    #            origin='lower',
-                    #            cmap='gray',
-                    #            interpolation='nearest')
-                    # plt.plot(path[0], path[1], 'w')
-                    # plt.show()
-                    q1.put((d, w2))
-                topp = []
-                for p in range(k):
-                    try:
-                        tmp = q1.get_nowait()
-                        topp.append(tmp[1])
-                        if word in topp:
+                        if word in top:
                             top_k[p] += 1
                     except:
                         break
-                # print(word, topp)
+                # print(word, top)
+            prev = word
     print("total: %d" % total)
     for i in range(k):
         print("top%d acc: %f" % (i + 1, top_k[i] / total))
@@ -552,7 +625,7 @@ def show_difference():
             px, py = centerize(px, py)
             pattern = list(zip(px, py))
             d, cost_matrix, acc_cost_matrix, path = dtw(
-                user_path, pattern, dist=euclidian_distance)
+                user_path, pattern, dist=euclidean_distance)
             # import matplotlib.pyplot as plt
 
             # plt.imshow(acc_cost_matrix.T,
@@ -614,14 +687,47 @@ def show_difference():
         plt.show()
 
 
+def cal_len_nodes():
+    num_nodes = {}
+    for person in PERSON:
+        for i in trange(1, SENT_LIMIT):
+            for j in range(0, WORD_LIMIT[i]):
+                data = get_user_path_original(person, i, j)
+                if data is None:
+                    continue
+                x, y, depths = aggregate(data)
+                word = get_word(i, j)
+                if len(word) not in num_nodes:
+                    num_nodes[len(word)] = []
+                num_nodes[len(word)].append(len(x))
+
+    avg_num_nodes = []
+    for i in num_nodes.keys():
+        avg_num_nodes.append([i, np.average(np.array(num_nodes[i]))])
+
+    import pandas as pd
+    data = pd.DataFrame(avg_num_nodes, columns=['x', 'y'])
+    from statsmodels.formula.api import ols
+    from statsmodels.api import graphics
+    formula = 'y ~ x'
+    ols_results = ols(formula, data).fit()
+    print(ols_results.summary())
+    fig = plt.figure(figsize=(15, 8))
+    fig = graphics.plot_regress_exog(ols_results, "x", fig=fig)
+    plt.show()
+
+
 def main():
     # while True:
     #     show_difference()
-    check_top_k("qlp", 50)
+    check_top_k("qlp", 3)
 
 
 if __name__ == "__main__":
     init_word_set()
+    # cal_len_nodes()
+    init_pattern_set()
+    init_language_model()
     print("using set size: ", len(WORD_SET))
     # print(SENT_LIMIT, len(WORD_LIMIT))
     main()

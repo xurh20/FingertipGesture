@@ -101,6 +101,19 @@ def genPoints(points_x, points_y, depths):
     return points
 
 
+def genPointLabels(points_x, points_y, depths):
+    pointLabels = []
+    centerPointGroups = gatherCorner(
+        calFirstCorner(points_x, points_y, depths),
+        calSecondCorner(points_x, points_y, depths))
+    # print(centerPointGroups)
+    for pointGroup in centerPointGroups:
+        pointLabels.append(pointGroup[int(len(pointGroup) / 2)])
+    # print(pointLabels)
+    # print(points)
+    return pointLabels
+
+
 def genVectors(points_x, points_y, depths, normalized=True):
     vectors = []
     points = genPoints(points_x, points_y, depths)
