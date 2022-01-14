@@ -482,88 +482,81 @@ def get_top_k(person, k):
     return top_k
 
 
-def calculate_dtw(user_path, d1, w2, pattern, l):
-    if (len(user_path) <= 0 or len(pattern) <= 0):
-        return
-    d, path = fastdtw(user_path, pattern, radius=1, dist=euclidean_distance)
-    l.append((d1 + 0.1 * d, w2))
+SIGMA_THETA_CHANNEL = 0.9
+SIGMA_DIST_CHANNEL = 8
+c1 = 0.5 / SIGMA_THETA_CHANNEL**2
+c2 = 0.5 / SIGMA_DIST_CHANNEL**2
+
+
+def get_best_n(data, prev):
+    x, y, depths = aggregate(data)
+    user = genVectors(x, y, depths)
+
+    q = PriorityQueue()
+    if x is not None:
+        x, y = downsample(x, y, depths, 2)
+        user_path_x, user_path_y = centerize(x, y)
+        user_path = np.array(list(zip(user_path_x, user_path_y)))
+
+        for w in WORD_SET:
+            # theta channel
+            pattern = THETA_PATTERN[w]
+            if len(user) <= 0 or len(pattern) <= 0:
+                continue
+            d1, cost_matrix, acc_cost_matrix, path = a_dtw(user,
+                                                           pattern,
+                                                           dist=distance)
+            d1 += 0.5
+            if d1 > 2 * SIGMA_THETA_CHANNEL:
+                continue
+
+            # distance channel
+            pattern = DIST_PATTERN[w]
+            if len(user_path) <= 0 or len(pattern) <= 0:
+                continue
+            d2, path = fastdtw(user_path,
+                               pattern,
+                               radius=1,
+                               dist=euclidean_distance)
+            if d2 > 2 * SIGMA_DIST_CHANNEL:
+                continue
+
+            # language model
+            if prev in BIWORD_PROB and w in BIWORD_PROB[prev]:
+                p3 = BIWORD_PROB[prev][w]
+            elif w in WORD_PROB:
+                p3 = WORD_PROB[w]
+            else:
+                p3 = 10**(-10)
+
+            q.put((c1 * (d1**2) + c2 * (d2**2) - math.log10(p3), w))
+    return q
 
 
 def check_top_k(person, k):
-
     total = 0
     top_k = [0] * k
-    for i in trange(2, 24):
+    for i in trange(2, SENT_LIMIT):
         prev = None
         for j in range(0, WORD_LIMIT[i]):
             data = get_user_path_original(person, i, j)
             if data is None:
                 continue
-            x, y, depths = aggregate(data)
-            user = genVectors(x, y, depths)
             word = get_word(i, j)
-
-            if word in WORD_SET and x is not None:
-                total += 1
-                l = []
-                for w1 in WORD_SET:
-                    pattern = THETA_PATTERN[w1]
-                    if (len(user) <= 0 or len(pattern) <= 0):
-                        continue
-                    d, cost_matrix, acc_cost_matrix, path = a_dtw(
-                        user, pattern, dist=distance)
-                    l.append((d, w1))
-
-                x, y = downsample(x, y, depths, 2)
-                user_path_x, user_path_y = centerize(x, y)
-                user_path = np.array(list(zip(user_path_x, user_path_y)))
-
-                # manager = Manager()
-                # ll = manager.list()
-                # pool = Pool(processes=4)
-                # for d1, w2 in l:
-                #     pool.apply_async(calculate_dtw, (
-                #         user_path,
-                #         d1,
-                #         w2,
-                #         DIST_PATTERN[w2],
-                #         ll,
-                #     ))
-                # pool.close()
-                # pool.join()
-
-                ll = []
-                for d1, w2 in l:
-                    pattern = DIST_PATTERN[w2]
-                    if (len(user_path) <= 0 or len(pattern) <= 0):
-                        continue
-                    d, path = fastdtw(user_path,
-                                      pattern,
-                                      radius=1,
-                                      dist=euclidean_distance)
-                    ll.append((d1 + 0.1 * d, w2))
-
-                q = PriorityQueue()
-                for d2, w3 in ll:
-                    if prev in BIWORD_PROB and w3 in BIWORD_PROB[prev]:
-                        d = BIWORD_PROB[prev][w3]
-                    elif w3 in WORD_PROB:
-                        d = WORD_PROB[w3]
-                    else:
-                        d = 10**(-10)
-
-                    q.put((d2 - 0.1 * np.log(d), w3))
-
-                top = []
-                for p in range(k):
-                    try:
-                        tmp = q.get_nowait()
-                        top.append(tmp[1])
-                        if word in top:
-                            top_k[p] += 1
-                    except:
-                        break
-                # print(word, top)
+            if word not in WORD_SET:
+                continue
+            total += 1
+            q = get_best_n(data, prev)
+            top = []
+            for p in range(k):
+                try:
+                    tmp = q.get_nowait()
+                    top.append(tmp[1])
+                    if word in top:
+                        top_k[p] += 1
+                except:
+                    break
+            # print(word, top)
             prev = word
     print("total: %d" % total)
     for i in range(k):
