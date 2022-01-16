@@ -482,18 +482,11 @@ def get_top_k(person, k):
     return top_k
 
 
-def calculate_dtw(user_path, d1, w2, pattern, l):
-    if (len(user_path) <= 0 or len(pattern) <= 0):
-        return
-    d, path = fastdtw(user_path, pattern, radius=1, dist=euclidean_distance)
-    l.append((d1 + 0.1 * d, w2))
-
-
 def check_top_k(person, k):
 
     total = 0
     top_k = [0] * k
-    for i in trange(2, 24):
+    for i in trange(2, SENT_LIMIT):
         prev = None
         for j in range(0, WORD_LIMIT[i]):
             data = get_user_path_original(person, i, j)
@@ -505,6 +498,7 @@ def check_top_k(person, k):
 
             if word in WORD_SET and x is not None:
                 total += 1
+                q1 = PriorityQueue()
                 l = []
                 for w1 in WORD_SET:
                     pattern = THETA_PATTERN[w1]
@@ -512,11 +506,19 @@ def check_top_k(person, k):
                         continue
                     d, cost_matrix, acc_cost_matrix, path = a_dtw(
                         user, pattern, dist=distance)
+                    q1.put((d, w1))
                     l.append((d, w1))
 
-                x, y = downsample(x, y, depths, 2)
-                user_path_x, user_path_y = centerize(x, y)
-                user_path = np.array(list(zip(user_path_x, user_path_y)))
+                # l = []
+                # for _ in range(50):
+                #     try:
+                #         l.append(q1.get_nowait())
+                #     except:
+                #         break
+
+                # x, y = downsample(x, y, depths, 2)
+                # user_path_x, user_path_y = centerize(x, y)
+                # user_path = np.array(list(zip(user_path_x, user_path_y)))
 
                 # manager = Manager()
                 # ll = manager.list()
@@ -532,19 +534,19 @@ def check_top_k(person, k):
                 # pool.close()
                 # pool.join()
 
-                ll = []
-                for d1, w2 in l:
-                    pattern = DIST_PATTERN[w2]
-                    if (len(user_path) <= 0 or len(pattern) <= 0):
-                        continue
-                    d, path = fastdtw(user_path,
-                                      pattern,
-                                      radius=1,
-                                      dist=euclidean_distance)
-                    ll.append((d1 + 0.1 * d, w2))
+                # ll = []
+                # for d1, w2 in l:
+                #     pattern = DIST_PATTERN[w2]
+                #     if (len(user_path) <= 0 or len(pattern) <= 0):
+                #         continue
+                #     d, path = fastdtw(user_path,
+                #                       pattern,
+                #                       radius=1,
+                #                       dist=euclidean_distance)
+                #     ll.append((d1 + 0.1 * d, w2))
 
                 q = PriorityQueue()
-                for d2, w3 in ll:
+                for d2, w3 in l:
                     if prev in BIWORD_PROB and w3 in BIWORD_PROB[prev]:
                         d = BIWORD_PROB[prev][w3]
                     elif w3 in WORD_PROB:
@@ -552,7 +554,7 @@ def check_top_k(person, k):
                     else:
                         d = 10**(-10)
 
-                    q.put((d2 - 0.1 * np.log(d), w3))
+                    q.put((0.61 * d2 - 0.39 * 0.1 * np.log10(d), w3))
 
                 top = []
                 for p in range(k):
@@ -563,7 +565,8 @@ def check_top_k(person, k):
                             top_k[p] += 1
                     except:
                         break
-                # print(word, top)
+                # print(word, top[:10])
+                # input()
             prev = word
     print("total: %d" % total)
     for i in range(k):
@@ -720,7 +723,7 @@ def cal_len_nodes():
 def main():
     # while True:
     #     show_difference()
-    check_top_k("qlp", 3)
+    check_top_k("qlp", 50)
 
 
 if __name__ == "__main__":
