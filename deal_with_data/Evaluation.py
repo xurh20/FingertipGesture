@@ -2,14 +2,14 @@ import socket
 import threading
 import sys
 
-sys.path.append('sensel-lib-wrappers/sensel-lib-python')
+sys.path.append('../sensel-lib-wrappers/sensel-lib-python')
 import sensel
 import numpy as np
 import matplotlib.pyplot as plt
 
 import argparse
 
-from deal_with_data.Pattern import get_best_n
+from Pattern import get_best_n
 from queue import PriorityQueue
 
 HEIGHT = 105
@@ -45,10 +45,10 @@ def wait_for_enter():
                     break
             else:
                 code = input('Press Enter to start ...')
-                recording = True
                 if (code == 'q'):
                     interrupted = True
                     break
+                recording = True
         except:
             interrupted = True
             break
@@ -129,16 +129,22 @@ if __name__ == '__main__':
                         top.append(q.get_nowait()[1])
                     except:
                         top.append("")
-                s.sendto(repr(top), ('localhost', 32826))
+                print(top)
+                s.sendto(repr(top).encode('gbk'), ('localhost', 34826))
 
                 data, adddr = s.recvfrom(2048)
                 total += 1
-                idx = eval(data)
+                idx = eval(data.decode())
+                print("choose: ", idx)
                 if idx < 0:
                     pass
                 else:
-                    top_k[eval(data)] += 1
+                    top_k[idx] += 1
                     prev = top[idx]
 
                 frame_series = []
+                plotting = False
+        print("total: %d" % total)
+        for i in range(3):
+            print("top%d acc: %f" % (i + 1, top_k[i] / total))
         close_sensel(frame)

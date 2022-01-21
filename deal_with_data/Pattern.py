@@ -489,6 +489,11 @@ c2 = 0.5 / SIGMA_DIST_CHANNEL**2
 
 
 def get_best_n(data, prev):
+    if (len(WORD_SET) <= 0):
+        init_word_set()
+        init_pattern_set()
+        init_language_model()
+
     x, y, depths = aggregate(data)
     user = genVectors(x, y, depths)
 
