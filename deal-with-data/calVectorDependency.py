@@ -117,7 +117,9 @@ def drawVectorDependency(person):
                 print("error, lost data ", person, i, j, allPattern[i - 1][j])
                 break
     axes[0].scatter(xs, ys)
+    axes[0].axis("scaled")
     axes[1].scatter(xt, yt)
+    axes[1].axis("scaled")
     plt.show()
 
 
@@ -227,7 +229,7 @@ if __name__ == "__main__":
     # for person in PERSON:
     #     genCSV(person)
     # anova("xq")
-    genCSV("lyh")
-    anova("lyh")
+    # genCSV("lyh")
+    # anova("lyh")
     # saveVectorDependency()
-    # drawVectorDependency("tty")
+    drawVectorDependency("tty")

@@ -486,7 +486,7 @@ def check_top_k(person, k):
 
     total = 0
     top_k = [0] * k
-    for i in trange(2, SENT_LIMIT):
+    for i in trange(2, int(SENT_LIMIT / 2)):
         prev = None
         for j in range(0, WORD_LIMIT[i]):
             data = get_user_path_original(person, i, j)
@@ -498,63 +498,37 @@ def check_top_k(person, k):
 
             if word in WORD_SET and x is not None:
                 total += 1
-                q1 = PriorityQueue()
-                l = []
-                for w1 in WORD_SET:
-                    pattern = THETA_PATTERN[w1]
+                x, y = downsample(x, y, depths, 2)
+                user_path_x, user_path_y = centerize(x, y)
+                user_path = np.array(list(zip(user_path_x, user_path_y)))
+                q = PriorityQueue()
+
+                for w in WORD_SET:
+                    # theta distance
+                    pattern = THETA_PATTERN[w]
                     if (len(user) <= 0 or len(pattern) <= 0):
                         continue
-                    d, cost_matrix, acc_cost_matrix, path = a_dtw(
+                    d1, cost_matrix, acc_cost_matrix, path = a_dtw(
                         user, pattern, dist=distance)
-                    q1.put((d, w1))
-                    l.append((d, w1))
 
-                # l = []
-                # for _ in range(50):
-                #     try:
-                #         l.append(q1.get_nowait())
-                #     except:
-                #         break
+                    # shape distance
+                    pattern = DIST_PATTERN[w]
+                    if (len(user_path) <= 0 or len(pattern) <= 0):
+                        continue
+                    d2, path = fastdtw(user_path,
+                                       pattern,
+                                       radius=1,
+                                       dist=euclidean_distance)
 
-                # x, y = downsample(x, y, depths, 2)
-                # user_path_x, user_path_y = centerize(x, y)
-                # user_path = np.array(list(zip(user_path_x, user_path_y)))
-
-                # manager = Manager()
-                # ll = manager.list()
-                # pool = Pool(processes=4)
-                # for d1, w2 in l:
-                #     pool.apply_async(calculate_dtw, (
-                #         user_path,
-                #         d1,
-                #         w2,
-                #         DIST_PATTERN[w2],
-                #         ll,
-                #     ))
-                # pool.close()
-                # pool.join()
-
-                # ll = []
-                # for d1, w2 in l:
-                #     pattern = DIST_PATTERN[w2]
-                #     if (len(user_path) <= 0 or len(pattern) <= 0):
-                #         continue
-                #     d, path = fastdtw(user_path,
-                #                       pattern,
-                #                       radius=1,
-                #                       dist=euclidean_distance)
-                #     ll.append((d1 + 0.1 * d, w2))
-
-                q = PriorityQueue()
-                for d2, w3 in l:
-                    if prev in BIWORD_PROB and w3 in BIWORD_PROB[prev]:
-                        d = BIWORD_PROB[prev][w3]
-                    elif w3 in WORD_PROB:
-                        d = WORD_PROB[w3]
+                    # bigram probabilities
+                    if prev in BIWORD_PROB and w in BIWORD_PROB[prev]:
+                        d = BIWORD_PROB[prev][w]
+                    elif w in WORD_PROB:
+                        d = WORD_PROB[w]
                     else:
                         d = 10**(-10)
 
-                    q.put((0.61 * d2 - 0.39 * 0.1 * np.log10(d), w3))
+                    q.put((0.6 * d2 - 0.4 * 0.1 * np.log10(d), w))
 
                 top = []
                 for p in range(k):
@@ -565,129 +539,114 @@ def check_top_k(person, k):
                             top_k[p] += 1
                     except:
                         break
-                # print(word, top[:10])
-                # input()
+                print(word, top[:10])
+                input()
             prev = word
     print("total: %d" % total)
     for i in range(k):
         print("top%d acc: %f" % (i + 1, top_k[i] / total))
 
 
-def show_difference():
+def show_difference(person):
     k = 50
-    i = random.randint(1, 80)
-    j = random.randint(1, 5)
-    data = get_user_path_original("qlp", i, j)
-    if data is None:
-        return
-    x, y, depths = aggregate(data)
-    user = genVectors(x, y, depths, False)
-    word = get_word(i, j)
-
-    if word is not None and x is not None:
-        q = PriorityQueue()
-        for w1 in WORD_SET:
-            pattern = genPattern(clean('g' + w1), False)
-            if (len(user) <= 0 or len(pattern) <= 0):
+    plt.axis("scaled")
+    for i in trange(2, int(SENT_LIMIT / 2)):
+        prev = None
+        for j in range(0, WORD_LIMIT[i]):
+            data = get_user_path_original(person, i, j)
+            if data is None:
                 continue
-            d, cost_matrix, acc_cost_matrix, path = a_dtw(user,
-                                                          pattern,
-                                                          dist=distance)
-            # import matplotlib.pyplot as plt
+            x, y, depths = aggregate(data)
+            user = genVectors(x, y, depths)
+            word = get_word(i, j)
 
-            # plt.imshow(acc_cost_matrix.T,
-            #            origin='lower',
-            #            cmap='gray',
-            #            interpolation='nearest')
-            # plt.plot(path[0], path[1], 'w')
-            # plt.show()
-            q.put((d, w1))
-        if (q.qsize() < 1):
-            return
-        top = []
-        for p in range(k):
-            try:
-                tmp = q.get_nowait()
-                top.append(tmp[1])
-                # if word in top:
-                #     top_k[p] += 1
-            except:
-                break
+            if word in WORD_SET and x is not None:
+                x, y = downsample(x, y, depths, 2)
+                user_path_x, user_path_y = centerize(x, y)
+                user_path = np.array(list(zip(user_path_x, user_path_y)))
+                q = PriorityQueue()
 
-        q1 = PriorityQueue()
-        user_path_x, user_path_y = centerize(x, y)
-        user_path = list(zip(user_path_x, user_path_y))
-        for w2 in top:
-            pattern = generate_standard_pattern(clean('g' + w2),
-                                                len(user_path),
-                                                lambda x: -2 * x**3 + 3 * x**2)
-            if (len(user_path) <= 0 or len(pattern) <= 0):
-                continue
-            px = [p[0] for p in pattern]
-            py = [p[1] for p in pattern]
-            px, py = centerize(px, py)
-            pattern = list(zip(px, py))
-            d, cost_matrix, acc_cost_matrix, path = dtw(
-                user_path, pattern, dist=euclidean_distance)
-            # import matplotlib.pyplot as plt
+                for w in WORD_SET:
+                    # theta distance
+                    pattern = THETA_PATTERN[w]
+                    if (len(user) <= 0 or len(pattern) <= 0):
+                        continue
+                    d1, cost_matrix, acc_cost_matrix, path = a_dtw(
+                        user, pattern, dist=distance)
 
-            # plt.imshow(acc_cost_matrix.T,
-            #            origin='lower',
-            #            cmap='gray',
-            #            interpolation='nearest')
-            # plt.plot(path[0], path[1], 'w')
-            # plt.show()
-            q1.put((d, w2))
-        topp = []
-        for p in range(k):
-            try:
-                tmp = q1.get_nowait()
-                topp.append(tmp[1])
-            except:
-                break
-        print(word, topp[0])
+                    # shape distance
+                    pattern = DIST_PATTERN[w]
+                    if (len(user_path) <= 0 or len(pattern) <= 0):
+                        continue
+                    d2, path = fastdtw(user_path,
+                                       pattern,
+                                       radius=1,
+                                       dist=euclidean_distance)
 
-        plt.scatter(user_path_x, user_path_y, c='black')
+                    # bigram probabilities
+                    if prev in BIWORD_PROB and w in BIWORD_PROB[prev]:
+                        d = BIWORD_PROB[prev][w]
+                    elif w in WORD_PROB:
+                        d = WORD_PROB[w]
+                    else:
+                        d = 10**(-10)
 
-        # ux, uy = 0, 0
-        # uxs, uys = [0], [0]
-        # for u in user:
-        #     ux += u[0]
-        #     uy += u[1]
-        #     uxs.append(ux)
-        #     uys.append(uy)
-        # plt.plot(uxs, uys, color='red')
+                    q.put((0.6 * d2 - 0.4 * 0.1 * np.log10(d), w))
 
-        # pred = topp[0]
-        # pred = genPattern(clean('g' + pred), False)
-        # ux, uy = 0, 0
-        # uxs, uys = [0], [0]
-        # for u in pred:
-        #     ux += u[0]
-        #     uy += u[1]
-        #     uxs.append(ux)
-        #     uys.append(uy)
-        # plt.plot(uxs, uys, color='green')
+                top = []
+                for p in range(k):
+                    try:
+                        tmp = q.get_nowait()
+                        top.append(tmp[1])
+                    except:
+                        break
+                print(word, top[0])
 
-        # answ = word
-        # answ = genPattern(clean('g' + answ), False)
-        # ux, uy = 0, 0
-        # uxs, uys = [0], [0]
-        # for u in answ:
-        #     ux += u[0]
-        #     uy += u[1]
-        #     uxs.append(ux)
-        #     uys.append(uy)
-        # plt.plot(uxs, uys, color='blue')
+                # black  - original user path (downsampled)
+                # red    - vectors extracted from user path
+                # green  - predicted word vectors
+                # blue   - correct word vectors
+                # yellow - correct word distance pattern
+                plt.scatter(user_path_x, user_path_y, c='black')
 
-        s_pattern = generate_standard_pattern(clean('g' + word), len(x),
-                                              lambda x: -2 * x**3 + 3 * x**2)
-        sx = [s[0] for s in s_pattern]
-        sy = [s[1] for s in s_pattern]
-        sx, sy = centerize(sx, sy)
-        plt.scatter(sx, sy, color='yellow')
+                # ux, uy = 0, 0
+                # uxs, uys = [0], [0]
+                # for u in user:
+                #     ux += u[0]
+                #     uy += u[1]
+                #     uxs.append(ux)
+                #     uys.append(uy)
+                # plt.plot(uxs, uys, color='red')
 
-        plt.show()
+                # pred = top[0]
+                # pred = genPattern(clean('g' + pred), False)
+                # ux, uy = 0, 0
+                # uxs, uys = [0], [0]
+                # for u in pred:
+                #     ux += u[0]
+                #     uy += u[1]
+                #     uxs.append(ux)
+                #     uys.append(uy)
+                # plt.plot(uxs, uys, color='green')
+
+                # answ = word
+                # answ = genPattern(clean('g' + answ), False)
+                # ux, uy = 0, 0
+                # uxs, uys = [0], [0]
+                # for u in answ:
+                #     ux += u[0]
+                #     uy += u[1]
+                #     uxs.append(ux)
+                #     uys.append(uy)
+                # plt.plot(uxs, uys, color='blue')
+
+                s_pattern = DIST_PATTERN[word]
+                sx = [s[0] for s in s_pattern]
+                sy = [s[1] for s in s_pattern]
+                sx, sy = centerize(sx, sy)
+                plt.scatter(sx, sy, color='yellow')
+
+                plt.show()
 
 
 def cal_len_nodes():
@@ -721,9 +680,9 @@ def cal_len_nodes():
 
 
 def main():
-    # while True:
-    #     show_difference()
-    check_top_k("qlp", 50)
+    while True:
+        show_difference("qlp")
+    # check_top_k("qlp", 50)
 
 
 if __name__ == "__main__":

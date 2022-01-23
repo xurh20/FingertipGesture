@@ -169,8 +169,9 @@ def drawPointCloudLetter(person, letter):  # letter should be capitalized
 def drawSinglePointClouds():
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    ax.set_xlim(-8, 8)
-    ax.set_ylim(-8, 8)
+    ax.axis("scaled")
+    ax.set_xlim(-10, 10)
+    ax.set_ylim(-10, 10)
 
     letterPositions = []
     for letter in LETTER:
@@ -186,7 +187,7 @@ def drawSinglePointClouds():
         confidence_ellipse(np.array([l[0] for l in lp]),
                            np.array([l[1] for l in lp]),
                            ax,
-                           n_std=1,
+                           n_std=3,
                            alpha=0.5,
                            facecolor='pink',
                            edgecolor='purple',
