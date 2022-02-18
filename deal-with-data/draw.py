@@ -11,6 +11,7 @@ from cleanWords import cleanWords, lowerCase
 from match import genPoints
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
+from scipy.stats import norm
 
 PERSON = ["gww", "hxz", "ljh", "lyh", "lzp", "qlp", "tty", "xq"]
 LETTER = [chr(i) for i in range(ord('A'), ord('Z') + 1)]
@@ -148,12 +149,13 @@ def saveLetterPoints():
     return skip, total
 
 
-def drawPointCloudLetter(person, letter):  # letter should be capitalized
-    with open(SAVE_LP_DIR + person + "_" + letter + ".txt", "r") as f:
-        data = json.loads(f.read())
-        points_x = data[0]
-        points_y = data[1]
-        points_d = data[2]
+def drawPointCloudLetter(person, letters):  # letter should be list of capitalized letters
+    for letter in letters:
+        with open(SAVE_LP_DIR + person + "_" + letter + ".txt", "r") as f:
+            data = json.loads(f.read())
+            points_x = data[0]
+            points_y = data[1]
+            points_d = data[2]
         max_depth = max(points_d)
         colors = list(
             map(
@@ -163,7 +165,7 @@ def drawPointCloudLetter(person, letter):  # letter should be capitalized
             plt.text(points_x[point], points_y[point], letter)
         plt.axis('equal')
         plt.scatter(points_x, points_y, c=colors)
-        plt.show()
+    plt.show()
 
 
 def drawSinglePointClouds():
@@ -198,8 +200,81 @@ def drawSinglePointClouds():
     plt.show()
 
 
+def drawSinglePointRec():
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.axis("scaled")
+    ax.set_xlim(-10, 10)
+    ax.set_ylim(-10, 10)
+
+    letterPositions = []
+    recPoints = [] # [[(,), (,)]]
+    for letter in LETTER:
+        lp = []
+        min_x, min_y = 1000000, 1000000
+        max_x, max_y = -1000000, -1000000
+        for person in PERSON:
+            with open(SAVE_LP_DIR + person + "_" + letter + ".txt", "r") as f:
+                data = json.loads(f.read())
+                lp.append((np.average(data[0]), np.average(data[1])))
+                min_x = min(min(data[0]), min_x)
+                min_y = min(min(data[1]), min_y)
+                max_x = max(max(data[0]), max_x)
+                max_y = max(max(data[1]), max_y)
+        recPoints.append([(min_x, min_y), (max_x, max_y)])
+        letterPositions.append(lp)
+    averaged = [np.average(lp, axis=0) for lp in letterPositions]
+
+    for points in recPoints:
+        rect=plt.Rectangle(
+            points[0],  # (x,y)矩形左下角
+            points[1][0] - points[0][0],  # width长
+            points[1][1] - points[0][1],  # height宽
+            color='maroon', 
+            alpha=0.05)
+        ax.add_patch(rect)
+    for i, letter in enumerate(LETTER):
+        plt.text(averaged[i][0], averaged[i][1], letter)
+    plt.scatter([a[0] for a in averaged], [a[1] for a in averaged])
+    plt.show()
+
+def drawGaussion(gaussion_list): # gaussion_list is a list of 1-d points
+    x = np.array(gaussion_list)
+    n, bins, patches = plt.hist(x, 20, density=1, facecolor='blue', alpha=0.75)  #第二个参数是直方图柱子的数量
+    mu =np.mean(x) #计算均值 
+    sigma =np.std(x) 
+    num_bins = 30 #直方图柱子的数量 
+    n, bins, patches = plt.hist(x, num_bins,density=1, alpha=0.75) 
+    #直方图函数，x为x轴的值，normed=1表示为概率密度，即和为一，绿色方块，色深参数0.5.返回n个概率，直方块左边线的x值，及各个方块对象 
+    # print(bins)
+    y = norm.pdf(bins, mu, sigma)#拟合一条最佳正态分布曲线y 
+    # print(y)
+    
+    plt.grid(True)
+    plt.plot(bins, y, 'r--') #绘制y的曲线 
+    plt.xlabel('values') #绘制x轴 
+    plt.ylabel('Probability') #绘制y轴 
+    plt.title('Histogram : $\mu$=' + str(round(mu,2)) + ' $\sigma=$'+str(round(sigma,2)))  #中文标题 u'xxx' 
+    #plt.subplots_adjust(left=0.15)#左边距 
+    plt.show()
+
+def drawLetterGaussion(letter, axis = "x"): # axis is "x" or "y"
+    point_x = []
+    point_y = []
+    for person in PERSON:
+        with open(SAVE_LP_DIR + person + "_" + letter + ".txt", "r") as f:
+            data = json.loads(f.read())
+            point_x += data[0]
+            point_y += data[1]
+    if (axis == "x"):
+        drawGaussion(point_x)
+    else:
+        drawGaussion(point_y)
+
 if __name__ == "__main__":
     # skip, total = saveLetterPoints()
     # print(skip, total)
-    # drawPointCloudLetter("xq", "G")
-    drawSinglePointClouds()
+    # drawPointCloudLetter("xq", ["A", "B", "P", "Y"])
+    # drawSinglePointClouds()
+    # drawSinglePointRec()
+    drawLetterGaussion("L", "y")

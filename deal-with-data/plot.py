@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from numpy.core.numeric import allclose
 from calBreak import loadRawNum, checkBreak
 
-PERSON = "qlp"
+PERSON = "gww"
 BASE_DIR = "../data/alphabeta_data_"
 SAVE_DIR = "../data/saved_data_" + PERSON + "/"
 SAVE_CB_DIR = "../data/break_num/"
@@ -34,8 +34,8 @@ MIN_PRESSURE_RATE = 0.4
 
 MIN_DISTANCE = 0.3  # 小于则合并
 
-SENTENCE = 4
-WORD = 3
+SENTENCE = 55
+WORD = 4
 
 
 def loadData(sentence, word, person):
@@ -565,8 +565,8 @@ if __name__ == "__main__":
     if args.show:
         data = loadData(SENTENCE, WORD, PERSON)
         points_x, points_y, depths = calculatePoints(data)
-        points_x = list(map(lambda x: x - WIDTH / 2, points_x))
-        points_y = list(map(lambda x: x + HEIGHT / 2, points_y))
+        # points_x = list(map(lambda x: x - WIDTH / 2, points_x))
+        # points_y = list(map(lambda x: x + HEIGHT / 2, points_y))
         showPicture(points_x, points_y, depths)
 
     elif args.all:

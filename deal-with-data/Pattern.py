@@ -7,7 +7,7 @@ from numpy.linalg.linalg import norm
 from tqdm import tqdm, trange
 from dtw import dtw
 from scipy.special import erf
-from match import genVectors, genPattern, a_dtw, genPointLabels
+from match import genPoints, genVectors, genPattern, genPosPattern, a_dtw, genPointLabels
 from cleanWords import clean
 from scipy.spatial.distance import cdist
 from math import sqrt
@@ -77,14 +77,15 @@ ANA_KB_POS = {
     'z': (-3.25208095, -4.35824647)
 }
 
-WORD_SET = set()
+WORD_SET = set() # all 10000 words
 PERSON = ["gww", "hxz", "ljh", "lyh", "lzp", "qlp", "tty", "xq"]
 global SENT_LIMIT, WORD_LIMIT
 SENT_LIMIT = 0
-WORD_LIMIT = []
-global THETA_PATTERN, DIST_PATTERN
+WORD_LIMIT = [] # words in voc
+global THETA_PATTERN, DIST_PATTERN, POS_PATTERN # 1-d theta, 0-d shape, 0-d position
 THETA_PATTERN = {}
 DIST_PATTERN = {}
+POS_PATTERN = {}
 global WORD_PROB, BIWORD_PROB
 WORD_PROB = {}
 BIWORD_PROB = {}
@@ -121,6 +122,9 @@ def theta_distance(p: tuple([float, float]),
     return -np.array(p).dot(np.array(q)) / np.linalg.norm(
         np.array(p)) / np.linalg.norm(np.array(q)) + 0.9
 
+def pos_distance(p, q):
+    # print(p, q)
+    return sqrt((p[0] - q[0])**2 + (p[1] - q[1])**2)
 
 def modulus_distance(p: tuple([float, float]), q: tuple([float,
                                                          float])) -> float:
@@ -350,7 +354,7 @@ def init_word_set():
 
 
 def init_pattern_set():
-    global THETA_PATTERN, DIST_PATTERN
+    global THETA_PATTERN, DIST_PATTERN, POS_PATTERN
     for w in WORD_SET:
         THETA_PATTERN[w] = np.array(genPattern(clean('g' + w)))
 
@@ -361,6 +365,9 @@ def init_pattern_set():
         dist_path_y = [d[1] for d in dist_path]
         dist_path_x, dist_path_y = centerize(dist_path_x, dist_path_y)
         DIST_PATTERN[w] = list(zip(dist_path_x, dist_path_y))
+
+
+        POS_PATTERN[w] = np.array(genPosPattern(clean('g' + w)))
 
 
 def init_language_model():
@@ -493,7 +500,11 @@ def check_top_k(person, k):
             if data is None:
                 continue
             x, y, depths = aggregate(data)
-            user = genVectors(x, y, depths)
+            user = genVectors(x, y, depths) # user vectors
+            user_points = genPoints(x, y, depths)
+            user_points = [np.array(i) - np.array(user_points[0]) for i in user_points]
+            print(user_points)
+            print(len(user_points))
             word = get_word(i, j)
 
             if word in WORD_SET and x is not None:
@@ -515,10 +526,19 @@ def check_top_k(person, k):
                     pattern = DIST_PATTERN[w]
                     if (len(user_path) <= 0 or len(pattern) <= 0):
                         continue
-                    d2, path = fastdtw(user_path,
-                                       pattern,
-                                       radius=1,
-                                       dist=euclidean_distance)
+                    # d2, path = fastdtw(user_path,
+                    #                    pattern,
+                    #                    radius=1,
+                    #                    dist=euclidean_distance)
+
+                    # position distance
+                    pattern = POS_PATTERN[w]
+                    if (len(user_points) <= 0 or len(pattern) <= 0):
+                        continue
+                    d3, cost_matrix, acc_cost_matrix, path = a_dtw(
+                        user_points, pattern, dist=pos_distance)
+                    d4, cost_matrix, acc_cost_matrix, path = a_dtw(
+                        pattern, user_points, dist=pos_distance)
 
                     # bigram probabilities
                     if prev in BIWORD_PROB and w in BIWORD_PROB[prev]:
@@ -528,7 +548,8 @@ def check_top_k(person, k):
                     else:
                         d = 10**(-10)
 
-                    q.put((0.6 * d2 - 0.4 * 0.1 * np.log10(d), w))
+                    # q.put((0.6 * d2 - 0.4 * 0.1 * np.log10(d), w))
+                    q.put((d3 + 5 * d4, w))
 
                 top = []
                 for p in range(k):
@@ -680,9 +701,9 @@ def cal_len_nodes():
 
 
 def main():
-    while True:
-        show_difference("qlp")
-    # check_top_k("qlp", 50)
+    # while True:
+    #     show_difference("qlp")
+    check_top_k("qlp", 50)
 
 
 if __name__ == "__main__":
