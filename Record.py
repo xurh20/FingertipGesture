@@ -370,16 +370,21 @@ if __name__ == '__main__':
                     elif args.max:
                         plot_frame()
                     elif args.predict:
-                        frame_series = np.array([frame_series]).reshape(
-                            -1, len(frame_series), 980)
-                        # frame_series[0] = frame_series[0].reshape(-1, 980)
-                        frame_series = pad_sequences(frame_series,
-                                                     maxlen=MAX_LEN,
-                                                     dtype="float32")
-                        print(np.argmax(model.predict(frame_series), axis=-1))
+                        try:
+                            frame_series = np.array([frame_series]).reshape(
+                                -1, len(frame_series), 980)
+                            # frame_series[0] = frame_series[0].reshape(-1, 980)
+                            frame_series = pad_sequences(frame_series,
+                                                         maxlen=MAX_LEN,
+                                                         dtype="float32")
+                            ans_id = np.argmax(model.predict(frame_series),
+                                               axis=-1)[0]
+                            print(candidates[ans_id])
+                        except:
+                            print("Deprecated data. Please try again.")
                     elif args.record:
                         np.save(
-                            "gt_jjx_1/" + candidates[candidate_index] +
+                            save_dir + "/" + candidates[candidate_index] +
                             "_" + str(current_record_num) + ".npy",
                             frame_series)
                     elif args.sum:
