@@ -7,7 +7,6 @@ sys.path.append('sensel-lib-wrappers/sensel-lib-python')
 import sensel
 import numpy as np
 import matplotlib.pyplot as plt
-from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 import pyqtgraph as pg
 from PyQt5 import QtCore, QtWidgets
@@ -19,8 +18,6 @@ from colour import Color
 from pgcolorbar.colorlegend import ColorLegendItem
 
 import argparse
-
-from keras.models import load_model
 
 candidates = [chr(y) for y in range(97, 123)]
 
@@ -117,27 +114,32 @@ def wait_for_enter():
         while True:
             try:
                 if (recording):
-                    code = input('Press Enter to stop...')
+                    code = input(
+                        'Press Enter to stop... Or \'p\' to return to previous'
+                    )
                     recording = False
                     plotting = True
-                    # candidate_index += 1
                     if (code == 'q'):
+                        interrupted = True
+                        break
+                    if code != 'p':
+                        current_record_num += 1
+                    if current_record_num >= 5:
+                        current_record_num = 0
+                        candidate_index += 1
+                    if candidate_index >= 26:
                         interrupted = True
                         break
                 else:
                     code = input('Press Enter to start record of ' +
                                  candidates[candidate_index])
-                    recording = True
                     if (code == 'q'):
                         interrupted = True
                         if args.feedback:
                             QtCore.QCoreApplication.instance().quit()
                         break
-                    elif (code == 'c'):
-                        if (candidate_index < 26):
-                            candidate_index += 1
-                            current_record_num = 0
-                        continue
+                    recording = True
+
             except:
                 interrupted = True
                 if args.feedback:
@@ -325,7 +327,7 @@ if __name__ == '__main__':
         print("Please enter the mode. Or check the list by -h")
         exit(0)
 
-    save_dir = "data/alphabeta_data"
+    save_dir = "new_data/ch_data"
     if not args.name is None:
         save_dir = save_dir + "_" + args.name
     else:
@@ -334,7 +336,10 @@ if __name__ == '__main__':
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
-    model = load_model('deal-with-data/model/lstm_model_weights.h5')
+    if args.predict:
+        from tensorflow.keras.preprocessing.sequence import pad_sequences
+        from keras.models import load_model
+        model = load_model('deal-with-data/model/lstm_model_weights.h5')
 
     handle = open_sensel()
     if handle:
@@ -345,9 +350,9 @@ if __name__ == '__main__':
         u.setDaemon(True)
         u.start()
 
-        t = threading.Thread(target=wait_for_enter)
-        t.setDaemon(True)
-        t.start()
+        # t = threading.Thread(target=wait_for_enter)
+        # t.setDaemon(True)
+        # t.start()
 
         if args.interactive:
             while not interrupted:
@@ -363,8 +368,13 @@ if __name__ == '__main__':
             win.show()
             app.exec_()
         else:
-            while not interrupted:
+            while True:
                 if plotting:
+                    code = input(
+                        'Press Enter to stop... Or \'p\' to return to previous'
+                    )
+                    recording = False
+                    plotting = False
                     if args.bound:
                         print(left_bound, right_bound, up_bound, down_bound)
                     elif args.max:
@@ -379,6 +389,7 @@ if __name__ == '__main__':
                                                          dtype="float32")
                             ans_id = np.argmax(model.predict(frame_series),
                                                axis=-1)[0]
+                            print(model.predict(frame_series))
                             print(candidates[ans_id])
                         except:
                             print("Deprecated data. Please try again.")
@@ -389,10 +400,29 @@ if __name__ == '__main__':
                             frame_series)
                     elif args.sum:
                         plot_frame()
+                    if code == 'q':
+                        interrupted = True
+                        break
+                    if code != 'p':
+                        current_record_num += 1
+                    if current_record_num >= 5:
+                        current_record_num = 0
+                        candidate_index += 1
+                    if candidate_index >= 26:
+                        interrupted = True
+                        break
 
                     frame_series = []
-                    current_record_num += 1
-                    plotting = False
+                else:
+                    code = input('Press Enter to start record of ' +
+                                 candidates[candidate_index])
+                    if (code == 'q'):
+                        interrupted = True
+                        if args.feedback:
+                            QtCore.QCoreApplication.instance().quit()
+                        break
+                    recording = True
+                    plotting = True
                 if (candidate_index >= len(candidates)):
                     break
         close_sensel(frame)
