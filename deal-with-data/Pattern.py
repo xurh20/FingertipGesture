@@ -4,11 +4,12 @@ from numpy.core.numeric import Inf
 import matplotlib.pyplot as plt
 from queue import PriorityQueue
 from numpy.linalg.linalg import norm
+from scipy.stats import norm as sci_norm
 from tqdm import tqdm, trange
 from dtw import dtw
 from scipy.special import erf
 from match import genPoints, genVectors, genPattern, genPosPattern, a_dtw, genPointLabels
-from cleanWords import clean
+from cleanWords import clean, lowerCase
 from scipy.spatial.distance import cdist
 from math import sqrt
 from fastdtw import fastdtw
@@ -77,6 +78,8 @@ ANA_KB_POS = {
     'z': (-3.25208095, -4.35824647)
 }
 
+SAVE_NON_CENTER_LP_DIR = "../data/non_center_letter_points/" # not move to G as first point
+LETTER = [chr(i) for i in range(ord('A'), ord('Z') + 1)]
 WORD_SET = set() # all 10000 words
 PERSON = ["gww", "hxz", "ljh", "lyh", "lzp", "qlp", "tty", "xq"]
 global SENT_LIMIT, WORD_LIMIT
@@ -89,7 +92,26 @@ POS_PATTERN = {}
 global WORD_PROB, BIWORD_PROB
 WORD_PROB = {}
 BIWORD_PROB = {}
+letterPosParas = {}
 
+
+def calLetterPosProb():
+    for letter in LETTER:
+        point_x = []
+        point_y = []
+        for person in PERSON:
+            with open(SAVE_NON_CENTER_LP_DIR + person + "_" + letter + ".txt", "r") as f:
+                data = json.loads(f.read())
+                point_x += data[0]
+                point_y += data[1]
+        x = np.array(point_x)
+        mu_x =np.mean(x)
+        sigma_x =np.std(x)
+        y = np.array(point_y)
+        mu_y =np.mean(y)
+        sigma_y =np.std(y)
+        letterPosParas[lowerCase(letter)] = [[mu_x, sigma_x], [mu_y, sigma_y]]
+    print(letterPosParas)
 
 def identity(pos: tuple([float, float])):
     return pos
@@ -490,11 +512,13 @@ def get_top_k(person, k):
 
 
 def check_top_k(person, k):
+    calLetterPosProb()
 
     total = 0
     top_k = [0] * k
-    for i in trange(2, int(SENT_LIMIT / 2)):
+    for i in trange(2, int(SENT_LIMIT)):
         prev = None
+        print(WORD_LIMIT[i])
         for j in range(0, WORD_LIMIT[i]):
             data = get_user_path_original(person, i, j)
             if data is None:
@@ -502,9 +526,9 @@ def check_top_k(person, k):
             x, y, depths = aggregate(data)
             user = genVectors(x, y, depths) # user vectors
             user_points = genPoints(x, y, depths)
-            user_points = [np.array(i) - np.array(user_points[0]) for i in user_points]
-            print(user_points)
-            print(len(user_points))
+            # user_points = [np.array(i) - np.array(user_points[0]) for i in user_points]
+            # print(user_points)
+            # print(len(user_points))
             word = get_word(i, j)
 
             if word in WORD_SET and x is not None:
@@ -519,26 +543,74 @@ def check_top_k(person, k):
                     pattern = THETA_PATTERN[w]
                     if (len(user) <= 0 or len(pattern) <= 0):
                         continue
+                    d1_, cost_matrix, acc_cost_matrix, path = a_dtw(
+                        pattern, user, dist=distance)
                     d1, cost_matrix, acc_cost_matrix, path = a_dtw(
                         user, pattern, dist=distance)
+                    d1 = (d1 + d1_) / 2
+                    # print(word, w)
+                    # print(pattern)
+                    # print(path)
+
+                    # calculate letter label
+                    match_group = []
+                    for patter_id in range(len(pattern)):
+                        match_num = np.sum(path[1] == patter_id)
+                        if (match_num == 0):
+                            print("error, some point has no match")
+                            break
+                        elif (match_num == 1):
+                            match_group.append([path[0][path[1].tolist().index(patter_id)]])
+                        else:
+                            match_group.append([path[0][path[1].tolist().index(patter_id)]])
+                    match_points = []
+                    for match_group_item in match_group:
+                        match_points.append(match_group_item[0])
+                    match_points.append(match_group[-1][-1] + 1)
+                    # print(match_points)
+                    if len(match_points) > len(clean(w)):
+                        match_points = match_points[1:] # delete first G
+
+                    # position probabilities
+                    wrong_word = False
+                    d5 = 1
+                    for letter_id, letter in enumerate(clean(w)):
+                        x_prob = 2 * sci_norm.cdf([user_points[match_points[letter_id]][0]], letterPosParas[lowerCase(letter)][0][0], letterPosParas[lowerCase(letter)][0][1])
+                        if x_prob > 1:
+                            x_prob = 2 - x_prob
+                        y_prob = 2 * sci_norm.cdf([user_points[match_points[letter_id]][1]], letterPosParas[lowerCase(letter)][1][0], letterPosParas[lowerCase(letter)][1][1])
+                        if y_prob > 1:
+                            y_prob = 2 - y_prob
+                        if y_prob < 0.01 or x_prob < 0.01:
+                            if (word == w):
+                                print("error", x_prob, y_prob)
+                                print(match_points)
+                                print(letter_id, letter, user_points[match_points[letter_id]][0], user_points[match_points[letter_id]][1])
+                            if (wrong_word == False):
+                                wrong_word = True
+                                break
+                        d5 -= x_prob
+                        d5 -= y_prob
+                    if (wrong_word == True):
+                        continue
 
                     # shape distance
                     pattern = DIST_PATTERN[w]
                     if (len(user_path) <= 0 or len(pattern) <= 0):
                         continue
-                    # d2, path = fastdtw(user_path,
-                    #                    pattern,
-                    #                    radius=1,
-                    #                    dist=euclidean_distance)
+                    d2, path = fastdtw(user_path,
+                                       pattern,
+                                       radius=1,
+                                       dist=euclidean_distance)
 
                     # position distance
-                    pattern = POS_PATTERN[w]
-                    if (len(user_points) <= 0 or len(pattern) <= 0):
-                        continue
-                    d3, cost_matrix, acc_cost_matrix, path = a_dtw(
-                        user_points, pattern, dist=pos_distance)
-                    d4, cost_matrix, acc_cost_matrix, path = a_dtw(
-                        pattern, user_points, dist=pos_distance)
+                    # pattern = POS_PATTERN[w]
+                    # if (len(user_points) <= 0 or len(pattern) <= 0):
+                    #     continue
+                    # d3, cost_matrix, acc_cost_matrix, path = a_dtw(
+                    #     user_points, pattern, dist=pos_distance)
+                    # d4, cost_matrix, acc_cost_matrix, path = a_dtw(
+                    #     pattern, user_points, dist=pos_distance)
 
                     # bigram probabilities
                     if prev in BIWORD_PROB and w in BIWORD_PROB[prev]:
@@ -548,8 +620,9 @@ def check_top_k(person, k):
                     else:
                         d = 10**(-10)
 
-                    # q.put((0.6 * d2 - 0.4 * 0.1 * np.log10(d), w))
-                    q.put((d3 + 5 * d4, w))
+                    # q.put((d5, w))
+                    q.put((0.4 * 10 * d1 + 0.3 * d2 - 0.3 * 5 * np.log10(d), w))
+                    # q.put((d3 + 5 * d4, w))
 
                 top = []
                 for p in range(k):
@@ -561,7 +634,7 @@ def check_top_k(person, k):
                     except:
                         break
                 print(word, top[:10])
-                input()
+                # input()
             prev = word
     print("total: %d" % total)
     for i in range(k):
@@ -703,6 +776,7 @@ def cal_len_nodes():
 def main():
     # while True:
     #     show_difference("qlp")
+    
     check_top_k("qlp", 50)
 
 

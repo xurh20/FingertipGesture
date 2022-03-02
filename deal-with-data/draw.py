@@ -15,8 +15,10 @@ from scipy.stats import norm
 
 PERSON = ["gww", "hxz", "ljh", "lyh", "lzp", "qlp", "tty", "xq"]
 LETTER = [chr(i) for i in range(ord('A'), ord('Z') + 1)]
+LOWER_LETTER = [chr(i) for i in range(ord('a'), ord('z') + 1)]
 SAVE_MP_DIR = "../data/match_points/"  # save match points
 SAVE_LP_DIR = "../data/letter_points/"  # save points sort by letter
+SAVE_NON_CENTER_LP_DIR = "../data/non_center_letter_points/" # not move to G as first point
 
 allPattern = cleanWords()
 
@@ -103,48 +105,65 @@ def genKeyPoint(person, sentence, word):
         print(key_point_label, points)
 
 
-def saveLetterPoints():
+def saveLetterPoints(move_to_center=True):
     skip = 0
     total = 0
+    # init
     all_chosen_points_x = []
     all_chosen_points_y = []
     all_chosen_points_d = []
+    for i in range(26):
+        all_chosen_points_x.append([])
+        all_chosen_points_y.append([])
+        all_chosen_points_d.append([])
     for person in PERSON:
         # person = "qlp"
-        for letter in LETTER:
-            for i in range(1, 82):
-                for j in range(len(allPattern[i - 1])):
-                    key_point = genKeyPoint(person, i, j)
-                    key_point_letter = allPattern[i - 1][j]
-                    total += 1
-                    if (key_point is None or len(key_point) == 0):
-                        skip += 1
-                        continue
-                    else:
-                        for letter_id in range(len(key_point_letter)):
-                            if (key_point_letter[letter_id] == letter
-                                    or key_point_letter[letter_id]
-                                    == lowerCase(letter)):
-                                # print(key_point, i)
-                                all_chosen_points_x.append(
-                                    key_point[letter_id][0])
-                                all_chosen_points_y.append(
-                                    key_point[letter_id][1])
-                                all_chosen_points_d.append(
-                                    key_point[letter_id][2])
-                print(i, "done")  # sentence done
-            print(person, "          done           ")  # person done
-            with open(SAVE_LP_DIR + person + "_" + letter + ".txt", "w") as f:
-                f.write(
-                    json.dumps([
-                        all_chosen_points_x, all_chosen_points_y,
-                        all_chosen_points_d
-                    ]))
+        for i in range(1, 82):
+            for j in range(len(allPattern[i - 1])):
+                key_point = genKeyPoint(person, i, j)
+                key_point_letter = allPattern[i - 1][j]
+                total += 1
+                if (key_point is None or len(key_point) == 0):
+                    skip += 1
+                    continue
+                else:
+                    for letter_id in range(len(key_point_letter)):
+                        if (lowerCase(key_point_letter[letter_id]) in LOWER_LETTER):
+                            # print(key_point, i)
+                            letter_index = LOWER_LETTER.index(key_point_letter[letter_id])
+                            all_chosen_points_x[letter_index].append(
+                                key_point[letter_id][0])
+                            all_chosen_points_y[letter_index].append(
+                                key_point[letter_id][1])
+                            all_chosen_points_d[letter_index].append(
+                                key_point[letter_id][2])
+            print(i, "done")  # sentence done
+        print(person, "          done           ")  # person done
+        if (move_to_center):
+            for i in range(26):
+                with open(SAVE_LP_DIR + person + "_" + LETTER[i] + ".txt", "w") as f:
+                    f.write(
+                        json.dumps([
+                            all_chosen_points_x[i], all_chosen_points_y[i],
+                            all_chosen_points_d[i]
+                        ]))
+        else:
+            for i in range(26):
+                with open(SAVE_NON_CENTER_LP_DIR + person + "_" + LETTER[i] + ".txt", "w") as f:
+                    f.write(
+                        json.dumps([
+                            all_chosen_points_x[i], all_chosen_points_y[i],
+                            all_chosen_points_d[i]
+                        ]))
 
-            # clean for next person
-            all_chosen_points_x = []
-            all_chosen_points_y = []
-            all_chosen_points_d = []
+        # clean for next person
+        all_chosen_points_x = []
+        all_chosen_points_y = []
+        all_chosen_points_d = []
+        for i in range(26):
+            all_chosen_points_x.append([])
+            all_chosen_points_y.append([])
+            all_chosen_points_d.append([])
 
     return skip, total
 
@@ -168,7 +187,7 @@ def drawPointCloudLetter(person, letters):  # letter should be list of capitaliz
     plt.show()
 
 
-def drawSinglePointClouds():
+def drawSinglePointClouds(move_to_center=True):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax.axis("scaled")
@@ -179,9 +198,14 @@ def drawSinglePointClouds():
     for letter in LETTER:
         lp = []
         for person in PERSON:
-            with open(SAVE_LP_DIR + person + "_" + letter + ".txt", "r") as f:
-                data = json.loads(f.read())
-                lp.append((np.average(data[0]), np.average(data[1])))
+            if (move_to_center):
+                with open(SAVE_LP_DIR + person + "_" + letter + ".txt", "r") as f:
+                    data = json.loads(f.read())
+                    lp.append((np.average(data[0]), np.average(data[1])))
+            else:
+                with open(SAVE_NON_CENTER_LP_DIR + person + "_" + letter + ".txt", "r") as f:
+                    data = json.loads(f.read())
+                    lp.append((np.average(data[0]), np.average(data[1])))
         letterPositions.append(lp)
     averaged = [np.average(lp, axis=0) for lp in letterPositions]
 
@@ -258,23 +282,29 @@ def drawGaussion(gaussion_list): # gaussion_list is a list of 1-d points
     #plt.subplots_adjust(left=0.15)#左边距 
     plt.show()
 
-def drawLetterGaussion(letter, axis = "x"): # axis is "x" or "y"
+def drawLetterGaussion(letter, axis = "x", move_to_center=True): # axis is "x" or "y"
     point_x = []
     point_y = []
     for person in PERSON:
-        with open(SAVE_LP_DIR + person + "_" + letter + ".txt", "r") as f:
-            data = json.loads(f.read())
-            point_x += data[0]
-            point_y += data[1]
+        if (move_to_center):
+            with open(SAVE_LP_DIR + person + "_" + letter + ".txt", "r") as f:
+                data = json.loads(f.read())
+                point_x += data[0]
+                point_y += data[1]
+        else:
+            with open(SAVE_NON_CENTER_LP_DIR + person + "_" + letter + ".txt", "r") as f:
+                data = json.loads(f.read())
+                point_x += data[0]
+                point_y += data[1]
     if (axis == "x"):
         drawGaussion(point_x)
     else:
         drawGaussion(point_y)
 
 if __name__ == "__main__":
-    # skip, total = saveLetterPoints()
+    # skip, total = saveLetterPoints(move_to_center=False)
     # print(skip, total)
     # drawPointCloudLetter("xq", ["A", "B", "P", "Y"])
-    # drawSinglePointClouds()
+    drawSinglePointClouds()
     # drawSinglePointRec()
-    drawLetterGaussion("L", "y")
+    # drawLetterGaussion("D", "x")

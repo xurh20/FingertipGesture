@@ -41,7 +41,7 @@ def lowerCase(letter):
 
 
 def cleanWords():  # start from zero
-    with open("../alphabet_data_from_jjx/lyh.txt", "r") as f:
+    with open("../data/voc.txt", "r") as f:
         data = f.read().split("\n")
         for i in range(len(data)):
             newSentence = []

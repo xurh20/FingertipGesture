@@ -7,6 +7,7 @@ from draw import genKeyPoint
 PERSON = ["gww", "hxz", "ljh", "lyh", "lzp", "qlp", "tty", "xq"]
 LETTER = [chr(i) for i in range(ord('A'), ord('Z') + 1)]
 SAVE_LP_DIR = "../data/letter_points/"  # save points sort by letter
+SAVE_NON_CENTER_LP_DIR = "../data/non_center_letter_points/" # not move to G as first point
 SAVE_WRONG_LETTER_DIR = "../data/wrong_letter/"  # save wrong letter info
 
 allPattern = cleanWords()
@@ -17,7 +18,7 @@ def calLetterPosProb():
         point_x = []
         point_y = []
         for person in PERSON:
-            with open(SAVE_LP_DIR + person + "_" + letter + ".txt", "r") as f:
+            with open(SAVE_NON_CENTER_LP_DIR + person + "_" + letter + ".txt", "r") as f:
                 data = json.loads(f.read())
                 point_x += data[0]
                 point_y += data[1]
@@ -54,7 +55,7 @@ def calWordPosProb():
                         y_prob = 2 * norm.cdf([key_point[letter_id][1]], letterPosParas[lowerCase(letter)][1][0], letterPosParas[lowerCase(letter)][1][1])
                         if y_prob > 1:
                             y_prob = 2 - y_prob
-                        if y_prob < 0.5:
+                        if y_prob < 0.05:
                             print("not good pos, letter is", letter, ", word is", key_point_word, ", person is", person, ", sentence number is", i, ", position is", key_point[letter_id])
                         print(y_prob)
             print(i, "done")  # sentence done
@@ -79,16 +80,16 @@ def saveWordPosProb():
                 else:
                     wrong_word = False
                     for letter_id, letter in enumerate(key_point_word):
-                        # x_prob = 2 * norm.cdf([key_point[letter_id][0]], letterPosParas[lowerCase(letter)][0][0], letterPosParas[lowerCase(letter)][0][1])
-                        # if x_prob > 1:
-                        #     x_prob = 2 - x_prob
+                        x_prob = 2 * norm.cdf([key_point[letter_id][0]], letterPosParas[lowerCase(letter)][0][0], letterPosParas[lowerCase(letter)][0][1])
+                        if x_prob > 1:
+                            x_prob = 2 - x_prob
                         # if x_prob < 0.1:
                         #     print("not good pos, letter is", letter, ", word is", key_point_word, ", person is", person, ", sentence number is", i, ", position is", key_point[letter_id])
                         # print(x_prob)
                         y_prob = 2 * norm.cdf([key_point[letter_id][1]], letterPosParas[lowerCase(letter)][1][0], letterPosParas[lowerCase(letter)][1][1])
                         if y_prob > 1:
                             y_prob = 2 - y_prob
-                        if y_prob < 0.5:
+                        if y_prob < 0.01 or x_prob < 0.01:
                             if (wrong_word == False):
                                 wrong_word = True
                                 wrong_word_num += 1

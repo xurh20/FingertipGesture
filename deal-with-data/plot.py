@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from numpy.core.numeric import allclose
 from calBreak import loadRawNum, checkBreak
 
-PERSON = "gww"
+PERSON = "qlp"
 BASE_DIR = "../data/alphabeta_data_"
 SAVE_DIR = "../data/saved_data_" + PERSON + "/"
 SAVE_CB_DIR = "../data/break_num/"
@@ -34,8 +34,8 @@ MIN_PRESSURE_RATE = 0.4
 
 MIN_DISTANCE = 0.3  # 小于则合并
 
-SENTENCE = 55
-WORD = 4
+SENTENCE = 9
+WORD = 0
 
 
 def loadData(sentence, word, person):
@@ -68,12 +68,12 @@ def calculatePoints(data):  # len(data) > 0
             points_y.append(y_average)
             depths.append(sum_force)
     # Move relatively to center
-    center_x = points_x[0]
-    center_y = points_y[0]
-    for i in range(len(points_x)):
-        points_x[i] -= center_x
-    for i in range(len(points_y)):
-        points_y[i] -= center_y
+    # center_x = points_x[0]
+    # center_y = points_y[0]
+    # for i in range(len(points_x)):
+    #     points_x[i] -= center_x
+    # for i in range(len(points_y)):
+    #     points_y[i] -= center_y
 
     # Normalize depths
     if (len(depths) > 0):
