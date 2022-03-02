@@ -3,12 +3,16 @@ import numpy as np
 from tqdm import tqdm
 from random import randint
 
-BASE_DIR = "data"
+BASE_DIR = "new_data"
 DATA_DIRS = []
 for dirpath, dirname, filename in os.walk(BASE_DIR):
     DATA_DIRS = dirname
     break
-bar1 = tqdm(DATA_DIRS)
+aug_dirs = []
+for dirname in DATA_DIRS:
+    if 'aug' not in dirname:
+        aug_dirs.append(dirname)
+bar1 = tqdm(aug_dirs)
 for dir in bar1:
     bar1.set_description("Augmenting data in " + os.path.join(BASE_DIR, dir))
     for i in range(4):
