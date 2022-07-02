@@ -1,5 +1,6 @@
 import threading
 import sys, time, os
+import traceback
 
 from numpy.lib.npyio import save
 
@@ -252,6 +253,29 @@ def plot_each_frame():
     plt.pause(0.01)
 
 
+def getAveragePic(path):
+    pic = np.zeros((70, 100))
+    for frame in path:
+        sum_force = 0
+        x_average = 0
+        y_average = 0
+        for y_coordinate in range(len(frame)):
+            for x_coordinate in range(len(frame[y_coordinate])):
+                sum_force += frame[y_coordinate][x_coordinate]
+        if (sum_force > 100):
+            for y_coordinate in range(len(frame)):
+                for x_coordinate in range(len(frame[y_coordinate])):
+                    rate = frame[y_coordinate][x_coordinate] / sum_force
+                    x_average += rate * x_coordinate
+                    y_average += rate * y_coordinate
+            try:
+                pic[int(x_average * 10) - 100][int((35 - y_average) * 10) -
+                                               150] = 1
+            except:
+                pass
+    return pic
+
+
 def close_sensel(frame):
     error = sensel.freeFrameData(handle, frame)
     error = sensel.stopScanning(handle)
@@ -293,10 +317,7 @@ if __name__ == '__main__':
     parser.add_argument("-n",
                         "--name",
                         help="specify the name of the saving directory")
-    parser.add_argument("-p",
-                        "--predict",
-                        action="store_true",
-                        help="print predicted input")
+    parser.add_argument("-p", "--predict", help="print predicted input")
     parser.add_argument("-r",
                         "--record",
                         action="store_true",
@@ -337,9 +358,15 @@ if __name__ == '__main__':
             os.mkdir(save_dir)
 
     if args.predict:
-        from tensorflow.keras.preprocessing.sequence import pad_sequences
+        from keras.preprocessing.sequence import pad_sequences
         from keras.models import load_model
-        model = load_model('deal-with-data/model/lstm_model_weights.h5')
+        if args.predict == 'cnn':
+            model = load_model('deal-with-data/model/cnn_model.h5')
+        elif args.predict == 'rnn':
+            model = load_model('deal-with-data/model/rnn_model.h5')
+        else:
+            print("Please choose your model [cnn|rnn]")
+            exit(0)
 
     handle = open_sensel()
     if handle:
@@ -381,18 +408,28 @@ if __name__ == '__main__':
                         plot_frame()
                     elif args.predict:
                         try:
-                            frame_series = np.array([frame_series]).reshape(
-                                -1, len(frame_series), 980)
-                            # frame_series[0] = frame_series[0].reshape(-1, 980)
-                            frame_series = pad_sequences(frame_series,
-                                                         maxlen=MAX_LEN,
-                                                         dtype="float32")
-                            ans_id = np.argmax(model.predict(frame_series),
-                                               axis=-1)[0]
-                            print(model.predict(frame_series))
-                            print(candidates[ans_id])
-                        except:
-                            print("Deprecated data. Please try again.")
+                            if args.predict == 'cnn':
+                                x = getAveragePic(np.array(frame_series))
+                                x = x.reshape(1, 70, 100, 1)
+                                ans_id = np.argmax(model.predict(x),
+                                                   axis=-1)[0]
+                                # print(model.predict(x))
+                                print(candidates[ans_id])
+                            elif args.predict == 'rnn':
+                                frame_series = np.array([
+                                    frame_series
+                                ]).reshape(-1, len(frame_series), 980)
+                                # frame_series[0] = frame_series[0].reshape(-1, 980)
+                                frame_series = pad_sequences(frame_series,
+                                                             maxlen=MAX_LEN,
+                                                             dtype="float32")
+                                ans_id = np.argmax(model.predict(frame_series),
+                                                   axis=-1)[0]
+                                print(model.predict(frame_series))
+                                print(candidates[ans_id])
+                        except Exception as e:
+                            # print("Deprecated data. Please try again.")
+                            print(traceback.format_exc())
                     elif args.record:
                         np.save(
                             save_dir + "/" + candidates[candidate_index] +

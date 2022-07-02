@@ -49,3 +49,15 @@ When the sensel is ready:
 - When NOT recording, input `p` to rewrite the previous record.
 - Input `q` ANY time to stop recording and exit.
 - Other inputs will be ignored.
+
+#### Plotting
+
+```cmd
+python Plot.py [-d Direction] [-i Index] [-p Person]
+```
+
+| Arguments | Description |
+| --------- | ----------- |
+| `-d`, `--direction` | specify the directions you want to look into, default as 0 |
+| `-i`, `--index` | specify the index you want to look into, default as 0 |
+| `-p`, `--person` | specify the person you want to look into |

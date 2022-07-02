@@ -6,10 +6,11 @@ sys.path.append('sensel-lib-wrappers/sensel-lib-python')
 import sensel
 import numpy as np
 import matplotlib.pyplot as plt
-from keras.models import load_model
-from tensorflow.keras.preprocessing.sequence import pad_sequences
+# from keras.models import load_model
+# from keras.preprocessing.sequence import pad_sequences
 import argparse
 from queue import PriorityQueue
+from Plot import getConfidenceQueue, plotOneLettersCorner, getConfidenceQueue8, plotOneLettersCorner8
 
 candidates = [chr(y) for y in range(97, 123)]
 
@@ -103,16 +104,16 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    model = load_model('deal-with-data/model/lstm_model_weights.h5')
+    # model = load_model('deal-with-data/model/lstm_model_weights.h5')
 
     handle = open_sensel()
     if handle:
         error, info = sensel.getSensorInfo(handle)
         frame = init_frame()
 
-        t = threading.Thread(target=wait_for_enter)
-        t.setDaemon(True)
-        t.start()
+        # t = threading.Thread(target=wait_for_enter)
+        # t.setDaemon(True)
+        # t.start()
         u = threading.Thread(target=scan_frames, args=(frame, info))
         u.setDaemon(True)
         u.start()
@@ -123,20 +124,24 @@ if __name__ == '__main__':
         total = 0
         top_k = [0] * 3
 
-        while not interrupted:
+        while True:
             if plotting:
+                code = input('Press Enter to stop...')
+                recording = False
+                plotting = False
                 try:
-                    frame_series = np.array([frame_series]).reshape(
-                        -1, len(frame_series), 980)
-                    # frame_series[0] = frame_series[0].reshape(-1, 980)
-                    frame_series = pad_sequences(frame_series,
-                                                 maxlen=MAX_LEN,
-                                                 dtype="float32")
-                    # ans_id = np.argmax(model.predict(frame_series), axis=-1)[0]
-                    top_list = model.predict(frame_series)[0]
-                    q: PriorityQueue = PriorityQueue()
-                    for i, d in enumerate(top_list):
-                        q.put((d, candidates[i]))
+                    # frame_series = np.array([frame_series]).reshape(
+                    #     -1, len(frame_series), 980)
+                    # # frame_series[0] = frame_series[0].reshape(-1, 980)
+                    # frame_series = pad_sequences(frame_series,
+                    #                              maxlen=MAX_LEN,
+                    #                              dtype="float32")
+                    # # ans_id = np.argmax(model.predict(frame_series), axis=-1)[0]
+                    # top_list = model.predict(frame_series)[0]
+                    # q: PriorityQueue = PriorityQueue()
+                    # for i, d in enumerate(top_list):
+                    #     q.put((d, candidates[i]))
+                    q = getConfidenceQueue8(frame_series)
 
                     top = []
                     for i in range(3):
@@ -146,23 +151,32 @@ if __name__ == '__main__':
                             top.append("")
                     print(top)
                     s.sendto(repr(top).encode('gbk'), ('localhost', 34826))
+                    data, adddr = s.recvfrom(2048)
+                    total += 1
+                    idx = eval(data.decode())
+                    print("choose: ", idx)
+                    if idx < 0:
+                        pass
+                    else:
+                        top_k[idx] += 1
+                        prev = top[idx]
+                    if idx != 0:
+                        plotOneLettersCorner8(frame_series)
                 except:
                     print("Deprecated data. Please try again.")
-                    continue
-
-                data, adddr = s.recvfrom(2048)
-                total += 1
-                idx = eval(data.decode())
-                print("choose: ", idx)
-                if idx < 0:
-                    pass
-                else:
-                    top_k[idx] += 1
-                    prev = top[idx]
-
-                frame_series = []
-                plotting = False
+                finally:
+                    frame_series = []
+                    plotting = False
+            else:
+                code = input('Press Enter to start...')
+                if (code == 'q'):
+                    interrupted = True
+                    break
+                recording = True
+                plotting = True
         print("total: %d" % total)
+        for i in range(1, 3):
+            top_k[i] += top_k[i - 1]
         for i in range(3):
             print("top%d acc: %f" % (i + 1, top_k[i] / total))
         close_sensel(frame)
