@@ -388,7 +388,7 @@ def get8Directions(path):
     
     Returns
     -------
-    arrays of directions
+    Tuple of directions indexes, arrays of directions
     
     """
 
@@ -401,13 +401,16 @@ def get8Directions(path):
 
     x, y, d = getAveragePath(path)
     simplified_dir = getCorners(path)
+    directions_index = []
     directions = []
 
     for u, v in list(zip(simplified_dir[:-1], simplified_dir[1:])):
-        if len(directions) <= 0 or directions[-1] != chooseClosestDirection(
-            (x[v] - x[u], y[v] - y[u])):
-            directions.append(
-                chooseClosestDirection((x[v] - x[u], y[v] - y[u])))
+        closest_direction = chooseClosestDirection((x[v] - x[u], y[v] - y[u]))
+        if len(directions) <= 0 or directions[-1] != closest_direction:
+            directions_index.append((u, v))
+            directions.append(closest_direction)
+        elif len(directions) > 0 and directions[-1] == closest_direction:
+            directions_index[-1] = (directions_index[-1][0], v)
     # plt.axis("scaled")
     # plt.xlim(-5, 5)
     # plt.ylim(-5, 5)
@@ -417,7 +420,7 @@ def get8Directions(path):
     # print(directions)
     # plt.show()
 
-    return np.array(directions)
+    return directions_index, np.array(directions)
 
 
 def getConfidenceQueue(path):
@@ -517,7 +520,7 @@ def plotAllLettersCorner():
         # print(getHVDirections(path))
         # print(d)
         try:
-            get8Directions(path)
+            plotOneLettersCorner8(path)
         except:
             pass
     plt.show()
@@ -967,6 +970,106 @@ def plotDoubleDirectionsCutToSingle():
     plt.show()
 
 
+def plotMultipleDirectionsCutToSingle():
+    """
+    description
+    ---------
+    Plot cutting directions adopting to 8 directions
+    
+    param
+    -------
+    None
+    
+    Returns
+    -------
+    None
+    
+    """
+
+    def getAngle(x1, x2, y1, y2):
+        angle = np.arctan2(y2 - y1, x2 - x1)
+        if angle > (DIRECTIONS_MAP['8'][-1] + np.pi) / 2:
+            angle -= 2 * np.pi
+        return angle
+
+    def angleDist(ang1, ang2):
+        return np.dot(ang1, ang2) / np.linalg.norm(ang1) / np.linalg.norm(ang2)
+
+    avg_angles = []
+    std_angles = []
+    orders = []
+    for dir in os.listdir(BASE_DIR):
+        if not 'letter_' in dir:
+            continue
+        for t_l_i, t_l in enumerate(LETTER):
+            for rep in range(5):
+                try:
+                    path = np.load(
+                        os.path.join(BASE_DIR, dir, "%s_%d.npy" % (t_l, rep)))
+
+                    x, y, d = getAveragePath(path, align_to_first=False)
+                    corners = getCorners(path)
+                    directions_index, redundant_8directions = get8Directions(
+                        path)
+                    identified_directions_index = []
+
+                    path_directions = [
+                        np.array([
+                            np.cos(EIGHT_DIRECTIONS[i]),
+                            np.sin(EIGHT_DIRECTIONS[i])
+                        ]) for i in redundant_8directions
+                    ]
+                    std_directions = [
+                        np.array([
+                            np.cos(EIGHT_DIRECTIONS[i]),
+                            np.sin(EIGHT_DIRECTIONS[i])
+                        ]) for i in DIRECTION_PATTERN8[t_l]
+                    ]
+                    paths = dtw_ndim.warping_path(path_directions,
+                                                  std_directions)
+                    idx = 0
+                    while idx < len(paths):
+                        match_list = []
+                        current_std_idx = paths[idx][1]
+                        while idx < len(
+                                paths) and paths[idx][1] == current_std_idx:
+                            match_list.append(paths[idx][0])
+                            idx += 1
+                        identified_directions_index.append(
+                            directions_index[match_list[np.argmin([
+                                angleDist(path_directions[m_l],
+                                          std_directions[current_std_idx])
+                                for m_l in match_list
+                            ])]])
+
+                    plt.axis("scaled")
+                    plt.xlim(10, 17)
+                    plt.ylim(15, 25)
+                    plt.scatter(x, y, c='blue')
+                    for _, corner in enumerate(corners):
+                        plt.scatter([x[corner]], [y[corner]], c='red')
+                        plt.text(x[corner], y[corner], str(_))
+                    for iu, iv in identified_directions_index:
+                        plt.plot([x[iu], x[iv]], [y[iu], y[iv]], c='green')
+                    plt.show()
+                except Exception as e:
+                    print(str(e))
+
+    # plt.axis("scaled")
+    # plt.xlim(-np.pi / 4, 2 * np.pi)
+    # plt.ylim(-np.pi / 4, 2 * np.pi)
+    # plt.scatter(std_angles, avg_angles)
+    # plt.show()
+    df = pd.DataFrame({
+        'std_angle': std_angles,
+        'usr_angle': avg_angles,
+        'order': orders
+    })
+    fig, axes = plt.subplots()
+    sns.boxplot(x='std_angle', y='usr_angle', hue='order', data=df, ax=axes)
+    plt.show()
+
+
 def plotDoubleDirections():
     """
     description
@@ -1272,7 +1375,7 @@ def calPatternAcc():
 
 def calPatternAcc8():
     dir = os.path.join(BASE_DIR,
-                       'ch_data_' + args.person + '_' + str(args.index))
+                       'ch_data_' + 'letter' + '_dir_' + str(args.index))
     top_k = [0] * 3
     total = 0
     for i, c in enumerate(LETTER):
@@ -1306,7 +1409,7 @@ def calPatternAcc8():
             # print(candidates)
             # input()
             if i not in sorted_index[:3]:
-                print(LETTER[i])
+                print(LETTER[i], LETTER[sorted_index[0]])
                 plotOneLettersCorner8(path)
     print(total, top_k)
 
@@ -1339,6 +1442,7 @@ if __name__ == '__main__':
     # anovaDirections()
     # plotStartDiff()
     # plotDoubleDirections()
-    plotAmplitude()
+    # plotAmplitude()
     # plotPressure()
     # plotDoubleDirectionsCutToSingle()
+    plotMultipleDirectionsCutToSingle()
