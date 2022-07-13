@@ -2,7 +2,9 @@ from itertools import product
 from math import atan2, sqrt
 import numpy as np
 import argparse
-import os, re
+import os
+import json
+import re
 import matplotlib.pyplot as plt
 from dtaidistance import dtw_ndim, dtw
 from scipy.ndimage import gaussian_filter1d, gaussian_filter
@@ -14,6 +16,7 @@ import pandas as pd
 from statsmodels.formula.api import ols
 from statsmodels.stats.anova import anova_lm
 from statsmodels.stats.multicomp import MultiComparison
+from astropy.modeling import models, fitting
 
 BASE_DIR = 'new_data'
 LETTER = [chr(y) for y in range(97, 123)]
@@ -37,6 +40,8 @@ COLORS = [
     'red', 'chocolate', 'darkorange', 'yellow', 'lawngreen', 'green', 'cyan',
     'slategrey', 'blue', 'darkviolet', 'magenta', 'hotpink'
 ]
+ORDERS_STR = ['1st', '2nd', '3rd',
+              '4th', '5th', '6th', '7th']
 DIRECTION_PATTERN = {
     'a': np.array([LEFT, RIGHT, DOWN]),
     'b': np.array([DOWN, UP, RIGHT, LEFT]),
@@ -115,17 +120,17 @@ def getAveragePath(path, align_to_first=True, integer=False):
     description
     ---------
     Get average path from path containing matrices to x, y, depth array respectively
-    
+
     param
     -------
     path: path containing matrices
     align_to_first: whether output begins with (0,0)
     integer: whether output coordinates are integers
-    
+
     Returns
     -------
     (x, y, depth)
-    
+
     """
 
     points_x = []
@@ -197,15 +202,15 @@ def getLongestDirection(path):
     description
     ---------
     Get longest direction as the main direction for the input path
-    
+
     param
     -------
     path: path containing matrices
-    
+
     Returns
     -------
     (start, end) indicating the start and end of the identified direction
-    
+
     """
 
     ANGLE_THRESHOLD = np.pi / 4
@@ -252,15 +257,15 @@ def getCorners(path):
     description
     ---------
     Get corners of path
-    
+
     param
     -------
     path: path containing matrices
-    
+
     Returns
     -------
     array containing indexes of corners
-    
+
     """
 
     ANGLE_THRESHOLD = np.pi / 4
@@ -381,23 +386,42 @@ def get8Directions(path):
     description
     ---------
     Get all directions adopted to 8 directions
-    
+
     param
     -------
     path: path containing matrices
-    
+
     Returns
     -------
     Tuple of directions indexes, arrays of directions
-    
+
     """
 
-    def chooseClosestDirection(v):
+    gauss_dict = {}
+    with open('gauss_direction.json', 'r') as file:
+        gauss_dict = json.load(file)
+
+    def getSingleDirectionConfidenceList(v):
         ang = np.arctan2(v[1], v[0])
-        if abs(ang) > 7 * np.pi / 8:
-            return 0
-        ans = np.argmin([abs(ang - std_ang) for std_ang in EIGHT_DIRECTIONS])
-        return ans
+        # if abs(ang) > 7 * np.pi / 8:
+        #     return 0
+        # ans = np.argmin([abs(ang - std_ang) for std_ang in EIGHT_DIRECTIONS])
+        confidence_list = []
+        for ix in range(8):
+            if ix == 0:
+                val = np.exp(-((ang-gauss_dict[0][1])/gauss_dict[0][2])**2/2)
+                val_adj = np.exp(-((ang-2*np.pi -
+                                 gauss_dict[0][1])/gauss_dict[0][2])**2/2)
+                confidence_list.append((gauss_dict[0][0], max(val, val_adj)))
+            elif ix == 7:
+                val = np.exp(-((ang-gauss_dict[7][1])/gauss_dict[7][2])**2/2)
+                val_adj = np.exp(-((ang+2*np.pi -
+                                 gauss_dict[7][1])/gauss_dict[7][2])**2/2)
+                confidence_list.append((gauss_dict[7][0], max(val, val_adj)))
+            else:
+                confidence_list.append(
+                    (gauss_dict[ix][0], np.exp(-((ang-gauss_dict[ix][1])/gauss_dict[ix][2])**2/2)))
+        return sorted(confidence_list, key=lambda t: t[1], reverse=True)
 
     x, y, d = getAveragePath(path)
     simplified_dir = getCorners(path)
@@ -436,15 +460,15 @@ def getConfidenceQueue8(path):
     description
     ---------
     Get confidence queue for eight-direction pattern
-    
+
     param
     -------
     path: path containing matrices
-    
+
     Returns
     -------
     queue containing (dist, letter)
-    
+
     """
 
     directions = [
@@ -546,15 +570,15 @@ def plotOneLettersCorner8(path):
     description
     ---------
     Plot one letter's corners adoopting to 8 directions
-    
+
     param
     -------
     path: path containing matrices
-    
+
     Returns
     -------
     None
-    
+
     """
 
     x, y, d = getAveragePath(path, False)
@@ -629,15 +653,15 @@ def plotDirections():
     description
     ---------
     Plot input directions with standard directions
-    
+
     param
     -------
     None
-    
+
     Returns
     -------
     None
-    
+
     """
 
     avg_angles = []
@@ -700,15 +724,15 @@ def plotAmplitude():
     description
     ---------
     Plot amplitude of 8 directions
-    
+
     param
     -------
     None
-    
+
     Returns
     -------
     None
-    
+
     """
     plt.axis("scaled")
     plt.xlim(-10, 10)
@@ -762,15 +786,15 @@ def plotPressure():
     description
     ---------
     Plot pressure of 8 directions
-    
+
     param
     -------
     None
-    
+
     Returns
     -------
     None
-    
+
     """
     for dir in os.listdir(BASE_DIR):
         if not 'ch_data_8_dir_' in dir:
@@ -821,15 +845,15 @@ def anovaDirections():
     description
     ---------
     Analyze anova of distiguishability between given directions
-    
+
     param
     -------
     None
-    
+
     Returns
     -------
     None
-    
+
     """
     avg_angles = []
     std_angles = []
@@ -874,20 +898,72 @@ def anovaDirections():
     print(mc.tukeyhsd())
 
 
+def gaussianDirections():
+    """
+    description
+    ---------
+    Fit gaussian for every direction
+
+    param
+    -------
+    None
+
+    Returns
+    -------
+    None
+
+    """
+
+    avg_angles = [[] for _ in range(8)]
+    for dir in os.listdir(BASE_DIR):
+        if not 'ch_data_' + str('8') + '_dir_' in dir:
+            continue
+        for i, c in enumerate(DIRECTIONS_MAP['8']):
+            for j in range(5):
+                try:
+                    path = np.load(
+                        os.path.join(BASE_DIR, dir,
+                                     str(i) + '_{}.npy'.format(j)))
+                    x, y, d = getAveragePath(path,
+                                             align_to_first=False,
+                                             integer=False)
+                    x = gaussian_filter1d(x, sigma=5)
+                    y = gaussian_filter1d(y, sigma=5)
+                    start, end = getLongestDirection(path)
+                    # start, end = getStartAndEnd(args.direction, x, y, i)
+                except:
+                    continue
+                if end < 0:
+                    continue
+                angle = np.arctan2(y[end] - y[start], x[end] - x[start])
+                # if angle > (DIRECTIONS_MAP[args.direction][-1] + np.pi) / 2:
+                if i == 0 and angle > 0:
+                    angle -= 2 * np.pi
+
+                avg_angles[i].append(angle)
+
+    with open('gauss_direction.json', 'w') as output:
+        gauss_dict = {}
+        for ix in range(8):
+            gauss_dict[ix] = (EIGHT_DIRECTIONS[ix], np.mean(
+                avg_angles[ix]), np.std(avg_angles[ix]))
+        json.dump(gauss_dict, output)
+
+
 def plotDoubleDirectionsCutToSingle():
     """
     description
     ---------
     Plot cutting directions adopting to 8 directions
-    
+
     param
     -------
     None
-    
+
     Returns
     -------
     None
-    
+
     """
 
     def getAngle(x1, x2, y1, y2):
@@ -975,15 +1051,15 @@ def plotMultipleDirectionsCutToSingle():
     description
     ---------
     Plot cutting directions adopting to 8 directions
-    
+
     param
     -------
     None
-    
+
     Returns
     -------
     None
-    
+
     """
 
     def getAngle(x1, x2, y1, y2):
@@ -1042,16 +1118,23 @@ def plotMultipleDirectionsCutToSingle():
                                 for m_l in match_list
                             ])]])
 
-                    plt.axis("scaled")
-                    plt.xlim(10, 17)
-                    plt.ylim(15, 25)
-                    plt.scatter(x, y, c='blue')
-                    for _, corner in enumerate(corners):
-                        plt.scatter([x[corner]], [y[corner]], c='red')
-                        plt.text(x[corner], y[corner], str(_))
-                    for iu, iv in identified_directions_index:
-                        plt.plot([x[iu], x[iv]], [y[iu], y[iv]], c='green')
-                    plt.show()
+                    # plt.axis("scaled")
+                    # plt.xlim(10, 17)
+                    # plt.ylim(15, 25)
+                    # plt.scatter(x, y, c='blue')
+                    # for _, corner in enumerate(corners):
+                    #     plt.scatter([x[corner]], [y[corner]], c='red')
+                    #     plt.text(x[corner], y[corner], str(_))
+                    # for iu, iv in identified_directions_index:
+                    #     plt.plot([x[iu], x[iv]], [y[iu], y[iv]], c='green')
+                    # plt.show()
+
+                    std_angles_set = [EIGHT_DIRECTIONS[i]
+                                      for i in DIRECTION_PATTERN8[t_l]]
+                    for ix, (iu, iv) in enumerate(identified_directions_index):
+                        std_angles.append(std_angles_set[ix])
+                        avg_angles.append(getAngle(x[iu], x[iv], y[iu], y[iv]))
+                        orders.append(ORDERS_STR[ix])
                 except Exception as e:
                     print(str(e))
 
@@ -1070,20 +1153,105 @@ def plotMultipleDirectionsCutToSingle():
     plt.show()
 
 
+def plotMultipleDirectionsCutToSinglePressure():
+    """
+    description
+    ---------
+    Plot presssure of cutting directions adopting to 8 directions
+
+    param
+    -------
+    None
+
+    Returns
+    -------
+    None
+
+    """
+
+    def getAngle(x1, x2, y1, y2):
+        angle = np.arctan2(y2 - y1, x2 - x1)
+        if angle > (DIRECTIONS_MAP['8'][-1] + np.pi) / 2:
+            angle -= 2 * np.pi
+        return angle
+
+    def angleDist(ang1, ang2):
+        return np.dot(ang1, ang2) / np.linalg.norm(ang1) / np.linalg.norm(ang2)
+
+    # plt.axis("scaled")
+    # plt.xlim(10, 17)
+    # plt.ylim(15, 25)
+    fig, axes = plt.subplots(5, 5)
+    for dir in os.listdir(BASE_DIR):
+        if not 'letter_' in dir:
+            continue
+        for t_l_i, t_l in enumerate(LETTER):
+            for rep in range(5):
+                try:
+                    path = np.load(
+                        os.path.join(BASE_DIR, dir, "%s_%d.npy" % (t_l, rep)))
+
+                    x, y, d = getAveragePath(path, align_to_first=False)
+                    corners = getCorners(path)
+                    directions_index, redundant_8directions = get8Directions(
+                        path)
+                    identified_directions_index = []
+
+                    path_directions = [
+                        np.array([
+                            np.cos(EIGHT_DIRECTIONS[i]),
+                            np.sin(EIGHT_DIRECTIONS[i])
+                        ]) for i in redundant_8directions
+                    ]
+                    std_directions = [
+                        np.array([
+                            np.cos(EIGHT_DIRECTIONS[i]),
+                            np.sin(EIGHT_DIRECTIONS[i])
+                        ]) for i in DIRECTION_PATTERN8[t_l]
+                    ]
+                    paths = dtw_ndim.warping_path(path_directions,
+                                                  std_directions)
+                    idx = 0
+                    while idx < len(paths):
+                        match_list = []
+                        current_std_idx = paths[idx][1]
+                        while idx < len(
+                                paths) and paths[idx][1] == current_std_idx:
+                            match_list.append(paths[idx][0])
+                            idx += 1
+                        identified_directions_index.append(
+                            directions_index[match_list[np.argmin([
+                                angleDist(path_directions[m_l],
+                                          std_directions[current_std_idx])
+                                for m_l in match_list
+                            ])]])
+
+                    # plt.axis("scaled")
+                    # plt.xlim(10, 17)
+                    # plt.ylim(15, 25)
+                    for ix, (iu, iv) in enumerate(identified_directions_index):
+                        pressure_list = d[iu:iv]
+                        axes[len(std_directions)-1][ix].plot(list(range(len(pressure_list))), pressure_list,
+                                                             c=COLORS[DIRECTION_PATTERN8[t_l][ix]])
+                except Exception as e:
+                    print(str(e))
+    plt.show()
+
+
 def plotDoubleDirections():
     """
     description
     ---------
     Plot included angles of user input directions with standard included angles
-    
+
     param
     -------
     None
-    
+
     Returns
     -------
     None
-    
+
     """
     avg_angles = []
     std_angles = []
@@ -1445,4 +1613,6 @@ if __name__ == '__main__':
     # plotAmplitude()
     # plotPressure()
     # plotDoubleDirectionsCutToSingle()
-    plotMultipleDirectionsCutToSingle()
+    # plotMultipleDirectionsCutToSingle()
+    # plotMultipleDirectionsCutToSinglePressure()
+    gaussianDirections()
