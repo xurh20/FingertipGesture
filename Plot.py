@@ -1,4 +1,5 @@
 from itertools import product
+import logging
 from math import atan2, sqrt
 import numpy as np
 import argparse
@@ -16,7 +17,6 @@ import pandas as pd
 from statsmodels.formula.api import ols
 from statsmodels.stats.anova import anova_lm
 from statsmodels.stats.multicomp import MultiComparison
-from astropy.modeling import models, fitting
 
 BASE_DIR = 'new_data'
 LETTER = [chr(y) for y in range(97, 123)]
@@ -40,8 +40,7 @@ COLORS = [
     'red', 'chocolate', 'darkorange', 'yellow', 'lawngreen', 'green', 'cyan',
     'slategrey', 'blue', 'darkviolet', 'magenta', 'hotpink'
 ]
-ORDERS_STR = ['1st', '2nd', '3rd',
-              '4th', '5th', '6th', '7th']
+ORDERS_STR = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th']
 DIRECTION_PATTERN = {
     'a': np.array([LEFT, RIGHT, DOWN]),
     'b': np.array([DOWN, UP, RIGHT, LEFT]),
@@ -178,6 +177,8 @@ def getAveragePath(path, align_to_first=True, integer=False):
     while i < len(depths) and depths[i] >= last_extrema * 0.7:
         i += 1
     trunc_at_end = i
+    if len(points_x[trunc_at_start:trunc_at_end]) <= 0:
+        logging.warning('Empty path extracted!')
     return np.array(points_x[trunc_at_start:trunc_at_end]), np.array(
         points_y[trunc_at_start:trunc_at_end]), np.array(
             depths[trunc_at_start:trunc_at_end])
@@ -283,6 +284,8 @@ def getCorners(path):
 
     # smooth the path
     x, y, d = getAveragePath(path)
+    if (len(x) <= 0):
+        return []
     x = gaussian_filter1d(x, sigma=5)
     y = gaussian_filter1d(y, sigma=5)
 
@@ -409,40 +412,47 @@ def get8Directions(path):
         confidence_list = []
         for ix in range(8):
             if ix == 0:
-                val = np.exp(-((ang-gauss_dict[0][1])/gauss_dict[0][2])**2/2)
-                val_adj = np.exp(-((ang-2*np.pi -
-                                 gauss_dict[0][1])/gauss_dict[0][2])**2/2)
-                confidence_list.append((gauss_dict[0][0], max(val, val_adj)))
+                val = np.exp(
+                    -((ang - gauss_dict['0'][1]) / gauss_dict['0'][2])**2 / 2)
+                val_adj = np.exp(-((ang - 2 * np.pi - gauss_dict['0'][1]) /
+                                   gauss_dict['0'][2])**2 / 2)
+                confidence_list.append((gauss_dict['0'][0], max(val, val_adj)))
             elif ix == 7:
-                val = np.exp(-((ang-gauss_dict[7][1])/gauss_dict[7][2])**2/2)
-                val_adj = np.exp(-((ang+2*np.pi -
-                                 gauss_dict[7][1])/gauss_dict[7][2])**2/2)
-                confidence_list.append((gauss_dict[7][0], max(val, val_adj)))
+                val = np.exp(
+                    -((ang - gauss_dict['7'][1]) / gauss_dict['7'][2])**2 / 2)
+                val_adj = np.exp(-((ang + 2 * np.pi - gauss_dict['7'][1]) /
+                                   gauss_dict['7'][2])**2 / 2)
+                confidence_list.append((gauss_dict['7'][0], max(val, val_adj)))
             else:
                 confidence_list.append(
-                    (gauss_dict[ix][0], np.exp(-((ang-gauss_dict[ix][1])/gauss_dict[ix][2])**2/2)))
+                    (gauss_dict[str(ix)][0],
+                     np.exp(-((ang - gauss_dict[str(ix)][1]) /
+                              gauss_dict[str(ix)][2])**2 / 2)))
         return sorted(confidence_list, key=lambda t: t[1], reverse=True)
 
     x, y, d = getAveragePath(path)
+    if (len(x) <= 0):
+        return [], np.array([EIGHT_DIRECTIONS[2]])
     simplified_dir = getCorners(path)
     directions_index = []
     directions = []
 
+    singleDCList = []
     for u, v in list(zip(simplified_dir[:-1], simplified_dir[1:])):
-        closest_direction = chooseClosestDirection((x[v] - x[u], y[v] - y[u]))
-        if len(directions) <= 0 or directions[-1] != closest_direction:
+        singleDCList.append(
+            getSingleDirectionConfidenceList((x[v] - x[u], y[v] - y[u])))
+
+    PROBABILITY_THRESHOLD = 0.1
+    # TODO: Return a confidence list
+    for i, (u,
+            v) in enumerate(list(zip(simplified_dir[:-1],
+                                     simplified_dir[1:]))):
+        closest_direction = singleDCList[i][0][0]
+        if len(directions) <= 0 or closest_direction != directions[-1]:
             directions_index.append((u, v))
             directions.append(closest_direction)
         elif len(directions) > 0 and directions[-1] == closest_direction:
             directions_index[-1] = (directions_index[-1][0], v)
-    # plt.axis("scaled")
-    # plt.xlim(-5, 5)
-    # plt.ylim(-5, 5)
-    # plt.plot(x, y)
-    # for i in simplified_dir:
-    #     plt.scatter([x[i]], [y[i]], c='red')
-    # print(directions)
-    # plt.show()
 
     return directions_index, np.array(directions)
 
@@ -945,8 +955,8 @@ def gaussianDirections():
     with open('gauss_direction.json', 'w') as output:
         gauss_dict = {}
         for ix in range(8):
-            gauss_dict[ix] = (EIGHT_DIRECTIONS[ix], np.mean(
-                avg_angles[ix]), np.std(avg_angles[ix]))
+            gauss_dict[ix] = (EIGHT_DIRECTIONS[ix], np.mean(avg_angles[ix]),
+                              np.std(avg_angles[ix]))
         json.dump(gauss_dict, output)
 
 
@@ -1129,8 +1139,9 @@ def plotMultipleDirectionsCutToSingle():
                     #     plt.plot([x[iu], x[iv]], [y[iu], y[iv]], c='green')
                     # plt.show()
 
-                    std_angles_set = [EIGHT_DIRECTIONS[i]
-                                      for i in DIRECTION_PATTERN8[t_l]]
+                    std_angles_set = [
+                        EIGHT_DIRECTIONS[i] for i in DIRECTION_PATTERN8[t_l]
+                    ]
                     for ix, (iu, iv) in enumerate(identified_directions_index):
                         std_angles.append(std_angles_set[ix])
                         avg_angles.append(getAngle(x[iu], x[iv], y[iu], y[iv]))
@@ -1231,8 +1242,10 @@ def plotMultipleDirectionsCutToSinglePressure():
                     # plt.ylim(15, 25)
                     for ix, (iu, iv) in enumerate(identified_directions_index):
                         pressure_list = d[iu:iv]
-                        axes[len(std_directions)-1][ix].plot(list(range(len(pressure_list))), pressure_list,
-                                                             c=COLORS[DIRECTION_PATTERN8[t_l][ix]])
+                        axes[len(std_directions) - 1][ix].plot(
+                            list(range(len(pressure_list))),
+                            pressure_list,
+                            c=COLORS[DIRECTION_PATTERN8[t_l][ix]])
                 except Exception as e:
                     print(str(e))
     plt.show()
@@ -1510,6 +1523,47 @@ def calCrossAcc(duel):
     print(top_k)
 
 
+def calSingleAcc():
+    top_k = [0] * 3
+    total = 0
+    for dir in os.listdir(BASE_DIR):
+        if not 'ch_data_8_dir_' in dir:
+            continue
+        for i in range(8):
+            for j in range(5):
+                path = np.load(
+                    os.path.join(BASE_DIR, dir,
+                                 str(i) + '_' + str(j) + '.npy'))
+                x, y, d = getAveragePath(path)
+                if (len(x) <= 0):
+                    continue
+                try:
+                    path_directions = [
+                        np.array([np.cos(_), np.sin(_)])
+                        for _ in get8Directions(path)[1]
+                    ]
+                except Exception as e:
+                    print(i, j)
+                    print(str(e))
+                    continue
+                candidates = []
+                for std_dir in EIGHT_DIRECTIONS:
+                    candidates.append(
+                        dtw_ndim.distance(
+                            path_directions,
+                            [np.array([np.cos(std_dir),
+                                       np.sin(std_dir)])]))
+                sorted_index = np.argsort(candidates)
+                for k in range(3):
+                    if i in sorted_index[:(k + 1)]:
+                        top_k[k] += 1
+                total += 1
+                if i not in sorted_index[:3]:
+                    print(i)
+                    # plotOneLettersCorner8(path)
+    print(total, top_k)
+
+
 def calPatternAcc():
     dir = os.path.join(BASE_DIR,
                        'ch_data_' + args.person + '_' + str(args.index))
@@ -1542,43 +1596,44 @@ def calPatternAcc():
 
 
 def calPatternAcc8():
-    dir = os.path.join(BASE_DIR,
-                       'ch_data_' + 'letter' + '_dir_' + str(args.index))
     top_k = [0] * 3
     total = 0
-    for i, c in enumerate(LETTER):
-        for j in range(5):
-            path = np.load(os.path.join(dir, c + '_' + str(j) + '.npy'))
-            try:
-                path_directions = [
-                    np.array([
-                        np.cos(EIGHT_DIRECTIONS[i]),
-                        np.sin(EIGHT_DIRECTIONS[i])
-                    ]) for i in get8Directions(path)
-                ]
-            except:
-                print(c, j)
-                continue
-            candidates = []
-            for ch in LETTER:
-                candidates.append(
-                    dtw_ndim.distance(path_directions, [
-                        np.array([
-                            np.cos(EIGHT_DIRECTIONS[i]),
-                            np.sin(EIGHT_DIRECTIONS[i])
-                        ]) for i in DIRECTION_PATTERN8[ch]
-                    ]))
-            sorted_index = np.argsort(candidates)
-            for k in range(3):
-                if i in sorted_index[:(k + 1)]:
-                    top_k[k] += 1
-            total += 1
-            # print(path_directions)
-            # print(candidates)
-            # input()
-            if i not in sorted_index[:3]:
-                print(LETTER[i], LETTER[sorted_index[0]])
-                plotOneLettersCorner8(path)
+    for dir in os.listdir(BASE_DIR):
+        if not 'ch_data_letter_dir_' in dir or not os.path.isdir(
+                os.path.join(BASE_DIR, dir)):
+            continue
+        for i, c in enumerate(LETTER):
+            for j in range(5):
+                path = np.load(
+                    os.path.join(BASE_DIR, dir, c + '_' + str(j) + '.npy'))
+                try:
+                    path_directions = [
+                        np.array([np.cos(_), np.sin(_)])
+                        for _ in get8Directions(path)[1]
+                    ]
+                except:
+                    print(c, j)
+                    continue
+                candidates = []
+                for ch in LETTER:
+                    candidates.append(
+                        dtw_ndim.distance(path_directions, [
+                            np.array([
+                                np.cos(EIGHT_DIRECTIONS[i]),
+                                np.sin(EIGHT_DIRECTIONS[i])
+                            ]) for i in DIRECTION_PATTERN8[ch]
+                        ]))
+                sorted_index = np.argsort(candidates)
+                for k in range(3):
+                    if i in sorted_index[:(k + 1)]:
+                        top_k[k] += 1
+                total += 1
+                # print(path_directions)
+                # print(candidates)
+                # input()
+                if i not in sorted_index[:3]:
+                    print(LETTER[i], LETTER[sorted_index[0]])
+                    # plotOneLettersCorner8(path)
     print(total, top_k)
 
 
@@ -1603,7 +1658,7 @@ if __name__ == '__main__':
     #     calCrossAcc(duel)
     # plotAllLettersCorner()
     # calPatternAcc()
-    # calPatternAcc8()
+    calPatternAcc8()
     # plot8Directions()
     # plot83Pressure()
     # plotDirections()
@@ -1615,4 +1670,5 @@ if __name__ == '__main__':
     # plotDoubleDirectionsCutToSingle()
     # plotMultipleDirectionsCutToSingle()
     # plotMultipleDirectionsCutToSinglePressure()
-    gaussianDirections()
+    # gaussianDirections()
+    # calSingleAcc()
