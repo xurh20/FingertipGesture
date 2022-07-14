@@ -432,7 +432,7 @@ def get8Directions(path):
 
     x, y, d = getAveragePath(path)
     if (len(x) <= 0):
-        return [], np.array([EIGHT_DIRECTIONS[2]])
+        return [], np.array([2])
     simplified_dir = getCorners(path)
     directions_index = []
     directions = []
@@ -955,7 +955,7 @@ def gaussianDirections():
     with open('gauss_direction.json', 'w') as output:
         gauss_dict = {}
         for ix in range(8):
-            gauss_dict[ix] = (EIGHT_DIRECTIONS[ix], np.mean(avg_angles[ix]),
+            gauss_dict[ix] = (ix, np.mean(avg_angles[ix]),
                               np.std(avg_angles[ix]))
         json.dump(gauss_dict, output)
 
@@ -1055,6 +1055,43 @@ def plotDoubleDirectionsCutToSingle():
     sns.boxplot(x='std_angle', y='usr_angle', hue='order', data=df, ax=axes)
     plt.show()
 
+def getIdentifiedGodPath(path, t_l):
+    def angleDist(ang1, ang2):
+        return 1-(np.dot(ang1, ang2) / np.linalg.norm(ang1) / np.linalg.norm(ang2))
+
+    directions_index, redundant_8directions = get8Directions(
+        path)
+    identified_directions_index = []
+
+    path_directions = [
+        np.array([
+            np.cos(EIGHT_DIRECTIONS[i]),
+            np.sin(EIGHT_DIRECTIONS[i])
+        ]) for i in redundant_8directions
+    ]
+    std_directions = [
+        np.array([
+            np.cos(EIGHT_DIRECTIONS[i]),
+            np.sin(EIGHT_DIRECTIONS[i])
+        ]) for i in DIRECTION_PATTERN8[t_l]
+    ]
+    paths = dtw_ndim.warping_path(path_directions,
+                                    std_directions)
+    idx = 0
+    while idx < len(paths):
+        match_list = []
+        current_std_idx = paths[idx][1]
+        while idx < len(
+                paths) and paths[idx][1] == current_std_idx:
+            match_list.append(paths[idx][0])
+            idx += 1
+        identified_directions_index.append(
+            directions_index[match_list[np.argmin([
+                angleDist(path_directions[m_l],
+                            std_directions[current_std_idx])
+                for m_l in match_list
+            ])]])
+    return identified_directions_index
 
 def plotMultipleDirectionsCutToSingle():
     """
@@ -1079,7 +1116,7 @@ def plotMultipleDirectionsCutToSingle():
         return angle
 
     def angleDist(ang1, ang2):
-        return np.dot(ang1, ang2) / np.linalg.norm(ang1) / np.linalg.norm(ang2)
+        return 1-(np.dot(ang1, ang2) / np.linalg.norm(ang1) / np.linalg.norm(ang2))
 
     avg_angles = []
     std_angles = []
@@ -1163,6 +1200,86 @@ def plotMultipleDirectionsCutToSingle():
     sns.boxplot(x='std_angle', y='usr_angle', hue='order', data=df, ax=axes)
     plt.show()
 
+def plotMultipleDirectionsCutToSingleAmplitude():
+    """
+    description
+    ---------
+    Plot Amplitude of cutting directions adopting to 8 directions
+
+    param
+    -------
+    None
+
+    Returns
+    -------
+    None
+
+    """
+
+    def getAngle(x1, x2, y1, y2):
+        angle = np.arctan2(y2 - y1, x2 - x1)
+        if angle > (DIRECTIONS_MAP['8'][-1] + np.pi) / 2:
+            angle -= 2 * np.pi
+        return angle
+
+    def angleDist(ang1, ang2):
+        return 1-(np.dot(ang1, ang2) / np.linalg.norm(ang1) / np.linalg.norm(ang2))
+
+    plt.axis("scaled")
+    plt.xlim(-10, 10)
+    plt.ylim(-10, 10)
+    for dir in os.listdir(BASE_DIR):
+        if not 'letter_' in dir:
+            continue
+        for t_l_i, t_l in enumerate(LETTER):
+            for rep in range(5):
+                try:
+                    path = np.load(
+                        os.path.join(BASE_DIR, dir, "%s_%d.npy" % (t_l, rep)))
+
+                    x, y, d = getAveragePath(path, align_to_first=False)
+                    corners = getCorners(path)
+                    directions_index, redundant_8directions = get8Directions(
+                        path)
+                    identified_directions_index = []
+
+                    path_directions = [
+                        np.array([
+                            np.cos(EIGHT_DIRECTIONS[i]),
+                            np.sin(EIGHT_DIRECTIONS[i])
+                        ]) for i in redundant_8directions
+                    ]
+                    std_directions = [
+                        np.array([
+                            np.cos(EIGHT_DIRECTIONS[i]),
+                            np.sin(EIGHT_DIRECTIONS[i])
+                        ]) for i in DIRECTION_PATTERN8[t_l]
+                    ]
+                    paths = dtw_ndim.warping_path(path_directions,
+                                                  std_directions)
+                    idx = 0
+                    while idx < len(paths):
+                        match_list = []
+                        current_std_idx = paths[idx][1]
+                        while idx < len(
+                                paths) and paths[idx][1] == current_std_idx:
+                            match_list.append(paths[idx][0])
+                            idx += 1
+                        identified_directions_index.append(
+                            directions_index[match_list[np.argmin([
+                                angleDist(path_directions[m_l],
+                                          std_directions[current_std_idx])
+                                for m_l in match_list
+                            ])]])
+
+                    # plt.axis("scaled")
+                    # plt.xlim(10, 17)
+                    # plt.ylim(15, 25)
+                    for ix, (iu, iv) in enumerate(identified_directions_index):
+                        plt.scatter([x[iv]-x[iu]],[y[iv]-y[iu]],c=COLORS[DIRECTION_PATTERN8[t_l][ix]])
+                except Exception as e:
+                    print(str(e))
+    plt.show()
 
 def plotMultipleDirectionsCutToSinglePressure():
     """
@@ -1187,7 +1304,7 @@ def plotMultipleDirectionsCutToSinglePressure():
         return angle
 
     def angleDist(ang1, ang2):
-        return np.dot(ang1, ang2) / np.linalg.norm(ang1) / np.linalg.norm(ang2)
+        return 1-(np.dot(ang1, ang2) / np.linalg.norm(ang1) / np.linalg.norm(ang2))
 
     # plt.axis("scaled")
     # plt.xlim(10, 17)
@@ -1249,6 +1366,118 @@ def plotMultipleDirectionsCutToSinglePressure():
                 except Exception as e:
                     print(str(e))
     plt.show()
+
+def plotMultipleDirectionsCutToSinglePressureExtrema():
+    """
+    description
+    ---------
+    Plot cutting directions adopting to 8 directions with pressure Extrema
+
+    param
+    -------
+    None
+
+    Returns
+    -------
+    None
+
+    """
+
+    def getAngle(x1, x2, y1, y2):
+        angle = np.arctan2(y2 - y1, x2 - x1)
+        if angle > (DIRECTIONS_MAP['8'][-1] + np.pi) / 2:
+            angle -= 2 * np.pi
+        return angle
+
+    def angleDist(ang1, ang2):
+        return 1-(np.dot(ang1, ang2) / np.linalg.norm(ang1) / np.linalg.norm(ang2))
+
+    corners_in_pressure_ex=[0]*10
+    pressure_ex_in_corners=[0]*10
+    for dir in os.listdir(BASE_DIR):
+        if not 'letter_' in dir:
+            continue
+        for t_l_i, t_l in enumerate(LETTER):
+            for rep in range(5):
+                try:
+                    path = np.load(
+                        os.path.join(BASE_DIR, dir, "%s_%d.npy" % (t_l, rep)))
+
+                    x, y, d = getAveragePath(path, align_to_first=False)
+                    corners = getCorners(path)
+                    directions_index, redundant_8directions = get8Directions(
+                        path)
+                    identified_directions_index = []
+
+                    path_directions = [
+                        np.array([
+                            np.cos(EIGHT_DIRECTIONS[i]),
+                            np.sin(EIGHT_DIRECTIONS[i])
+                        ]) for i in redundant_8directions
+                    ]
+                    std_directions = [
+                        np.array([
+                            np.cos(EIGHT_DIRECTIONS[i]),
+                            np.sin(EIGHT_DIRECTIONS[i])
+                        ]) for i in DIRECTION_PATTERN8[t_l]
+                    ]
+                    paths = dtw_ndim.warping_path(path_directions,
+                                                  std_directions)
+
+                    idx = 0
+                    while idx < len(paths):
+                        match_list = []
+                        current_std_idx = paths[idx][1]
+                        while idx < len(
+                                paths) and paths[idx][1] == current_std_idx:
+                            match_list.append(paths[idx][0])
+                            idx += 1
+                        identified_directions_index.append(
+                            directions_index[match_list[np.argmin([
+                                angleDist(path_directions[m_l],
+                                          std_directions[current_std_idx])
+                                for m_l in match_list
+                            ])]])
+
+                    fig, axes=plt.subplots(1,2)
+                    axes[0].axis("scaled")
+                    axes[0].set_xlim(10, 17)
+                    axes[0].set_ylim(15, 25)
+                    axes[0].scatter(x, y, c='blue')
+                    axes[1].scatter(list(range(len(d))),d)
+                    for _, corner in enumerate(corners):
+                        axes[0].scatter([x[corner]], [y[corner]], c='red')
+                        axes[0].text(x[corner], y[corner], str(_))
+                        axes[1].scatter([corner],[d[corner]],c='red')
+                        axes[1].text(corner, d[corner], str(_))
+                    for iu, iv in identified_directions_index:
+                        axes[0].plot([x[iu], x[iv]], [y[iu], y[iv]], c='green')
+
+                    clamped_d=(d-np.min(d))/(np.max(d)-np.min(d))
+                    pressure_persistence_pairs=sorted([t for t in RunPersistence(clamped_d) if t[1] > 0.1],key=lambda x: x[0])
+                    for (pressure_ex,persistence) in pressure_persistence_pairs:
+                        axes[1].scatter([pressure_ex],[d[pressure_ex]],c='blue')
+                        axes[1].text(pressure_ex,d[pressure_ex],str(persistence))
+
+                    plt.show()
+
+                    # std_angles_set = [
+                    #     EIGHT_DIRECTIONS[i] for i in DIRECTION_PATTERN8[t_l]
+                    # ]
+                    # for ix, (iu, iv) in enumerate(identified_directions_index):
+                    #     std_angles.append(std_angles_set[ix])
+                    #     avg_angles.append(getAngle(x[iu], x[iv], y[iu], y[iv]))
+                        # orders.append(ORDERS_STR[ix])
+
+                    for corn in corners:
+                        corners_in_pressure_ex[np.min([abs(corn-ppp[0]) for ppp in pressure_persistence_pairs])]+=1
+                    for (pressure_ex,persistence) in pressure_persistence_pairs:
+                        pressure_ex_in_corners[np.min([abs(pressure_ex-corn) for corn in corners])]+=1
+                except Exception as e:
+                    print(str(e))
+
+    print(pressure_ex_in_corners)
+    print(corners_in_pressure_ex)
 
 
 def plotDoubleDirections():
@@ -1539,7 +1768,7 @@ def calSingleAcc():
                     continue
                 try:
                     path_directions = [
-                        np.array([np.cos(_), np.sin(_)])
+                        np.array([np.cos(EIGHT_DIRECTIONS[_]), np.sin(EIGHT_DIRECTIONS[_])])
                         for _ in get8Directions(path)[1]
                     ]
                 except Exception as e:
@@ -1608,7 +1837,7 @@ def calPatternAcc8():
                     os.path.join(BASE_DIR, dir, c + '_' + str(j) + '.npy'))
                 try:
                     path_directions = [
-                        np.array([np.cos(_), np.sin(_)])
+                        np.array([np.cos(EIGHT_DIRECTIONS[_]), np.sin(EIGHT_DIRECTIONS[_])])
                         for _ in get8Directions(path)[1]
                     ]
                 except:
@@ -1658,7 +1887,7 @@ if __name__ == '__main__':
     #     calCrossAcc(duel)
     # plotAllLettersCorner()
     # calPatternAcc()
-    calPatternAcc8()
+    # calPatternAcc8()
     # plot8Directions()
     # plot83Pressure()
     # plotDirections()
@@ -1669,6 +1898,8 @@ if __name__ == '__main__':
     # plotPressure()
     # plotDoubleDirectionsCutToSingle()
     # plotMultipleDirectionsCutToSingle()
+    # plotMultipleDirectionsCutToSingleAmplitude()
     # plotMultipleDirectionsCutToSinglePressure()
+    plotMultipleDirectionsCutToSinglePressureExtrema()
     # gaussianDirections()
     # calSingleAcc()
