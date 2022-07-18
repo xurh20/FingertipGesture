@@ -97,7 +97,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    if args.index < 0:
+    if int(args.index) < 0:
         idx = 0
         while True:
             save_dir = "new_data/ch_data_" + 'letter' + '_dir_' + str(idx)
@@ -107,7 +107,7 @@ if __name__ == '__main__':
                 break
             idx += 1
     else:
-        save_dir = "new_data/ch_data_" + 'letter' + '_dir_' + str(args.index)
+        save_dir = "new_data/ch_data_" + 'letter' + '_dir_' + args.index
 
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
