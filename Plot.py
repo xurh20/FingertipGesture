@@ -114,7 +114,6 @@ allowed_coord = [
     np.array([1, -1]),
 ]
 
-
 def getAveragePath(path, align_to_first=True, integer=False):
     """
     description
@@ -311,8 +310,9 @@ def getCorners(path):
 
     """
 
-    ANGLE_THRESHOLD = np.pi / 5
-    MERGE_THRESHOLD = 15
+    ANGLE_THRESHOLD = np.pi / 4
+    ANGLE_THRESHOLD_2 = np.pi / 10
+    MERGE_THRESHOLD = 10
     MERGE_DIST_THRESHOLD = 1
     HV_THRESHOLD = 0.6
     HV_AVG_THRESHOLD = 0.5
@@ -321,33 +321,71 @@ def getCorners(path):
         ang1 = np.arctan2(u[1], u[0])
         ang2 = np.arctan2(v[1], v[0])
         return 2 * np.pi - abs(ang1 -
-                               ang2) if abs(ang1 -
+                                ang2) if abs(ang1 -
                                             ang2) >= np.pi else abs(ang1 -
                                                                     ang2)
 
     # smooth the path
-    x, y, d = getAveragePath(path)
-    if (len(x) <= 0):
-        return []
-    x = gaussian_filter1d(x, sigma=5)
-    y = gaussian_filter1d(y, sigma=5)
+    x, y, d = getAveragePath(path,False)
+    x = gaussian_filter1d(x, sigma=8)
+    y = gaussian_filter1d(y, sigma=8)
+    d = gaussian_filter1d(d, sigma=8)
+
+    # collecting extrema points of pressure
+    d=np.array(d)
+    clamped_d = (d - np.min(d)) / (np.max(d) - np.min(d))
+    pressure_persistence_pairs = sorted(
+        [t for t in RunPersistence(clamped_d) if t[1] > 0.05],
+        key=lambda x: x[0])
+    pre_collected_corners=[int(ppp[0]) for ppp in pressure_persistence_pairs]
+    if pre_collected_corners[0] - 0 > MERGE_THRESHOLD:
+        pre_collected_corners.insert(0,0)
+    if len(x) - 1 - pre_collected_corners[-1] > MERGE_THRESHOLD:
+        pre_collected_corners.append(len(x) - 1)
 
     # filter the turning points that seperates angles
     debug_dir = []
-    debug_dir.append(0)
-    i = 1
-    while i < len(x):
-        cur_v = (x[i] - x[i - 1], y[i] - y[i - 1])
-        j = i
-        while j < len(x) and angleDiff(
-            (x[j] - x[j - 1], y[j] - y[j - 1]),
-                cur_v) < ANGLE_THRESHOLD and angleDiff(
-                    (x[j] - x[j - 1], y[j] - y[j - 1]),
-                    (x[i] - x[i - 1], y[i] - y[i - 1])) < ANGLE_THRESHOLD:
-            cur_v = (x[j] - x[i - 1], y[j] - y[i - 1])
-            j += 1
-        debug_dir.append(j - 1)
-        i = j
+    debug_dir.append(pre_collected_corners[0])
+    for u,v in list(zip(pre_collected_corners[:-1],pre_collected_corners[1:])):
+        i = u+1
+        while i < v:
+            cur_v = (x[i] - x[i - 1], y[i] - y[i - 1])
+            j = i
+            while j < v and angleDiff(
+                (x[j] - x[j - 1], y[j] - y[j - 1]),
+                    cur_v) < ANGLE_THRESHOLD and angleDiff(
+                        (x[j] - x[j - 1], y[j] - y[j - 1]),
+                        (x[i] - x[i - 1], y[i] - y[i - 1])) < ANGLE_THRESHOLD:
+                cur_v = (x[j] - x[i - 1], y[j] - y[i - 1])
+                j += 1
+            debug_dir.append(j-1)
+            i = j
+
+    # merge redundant points caused by overreact
+    real_debug_dir=[]
+    for dd in debug_dir:
+        if len(real_debug_dir)<=1:
+            real_debug_dir.append(dd)
+            continue
+        if angleDiff((x[real_debug_dir[-1]]-x[real_debug_dir[-2]],y[real_debug_dir[-1]]-y[real_debug_dir[-2]]),(x[dd]-x[real_debug_dir[-1]],y[dd]-y[real_debug_dir[-1]])) <= ANGLE_THRESHOLD_2:
+            real_debug_dir[-1]=dd
+        else:
+            real_debug_dir.append(dd)
+    debug_dir=real_debug_dir
+
+    # i = 1
+    # while i < len(x):
+    #     cur_v = (x[i] - x[i - 1], y[i] - y[i - 1])
+    #     j = i
+    #     while j < len(x) and angleDiff(
+    #         (x[j] - x[j - 1], y[j] - y[j - 1]),
+    #             cur_v) < ANGLE_THRESHOLD and angleDiff(
+    #                 (x[j] - x[j - 1], y[j] - y[j - 1]),
+    #                 (x[i] - x[i - 1], y[i] - y[i - 1])) < ANGLE_THRESHOLD:
+    #         cur_v = (x[j] - x[i - 1], y[j] - y[i - 1])
+    #         j += 1
+    #     debug_dir.append(j-1)
+    #     i = j
 
     # merge points that are enough close to each other
     i = 0
@@ -363,8 +401,6 @@ def getCorners(path):
             lat = debug_dir[i]
             i += 1
         simplified_dir.append(int(np.mean(t)))
-
-    simplified_dir.append(len(x) - 1)
 
     # calculate the average of x/y offsets
     x_avg, y_avg = 0, 0
@@ -393,7 +429,7 @@ def getCorners(path):
             (y_off > y_avg * HV_AVG_THRESHOLD and y_off > HV_THRESHOLD)):
             filtered_dir.append(sd)
 
-    return filtered_dir
+    return simplified_dir
 
 
 def getHVDirections(path):
@@ -435,6 +471,10 @@ def getHVDirections(path):
 
 
 def getSingleDirectionConfidenceList(v):
+    gauss_dict = {}
+    with open('gauss_direction_mix.json', 'r') as file:
+        gauss_dict = json.load(file)
+
     ang = np.arctan2(v[1], v[0])
     # if abs(ang) > 7 * np.pi / 8:
     #     return 0
@@ -1388,6 +1428,123 @@ def plotMultipleDirectionsCutToSingle():
     mc = MultiComparison(avg_angles, std_angles)
     print(mc.tukeyhsd())
 
+def plotMultipleDirectionsCutToSingleIncludedAngles():
+    """
+    description
+    ---------
+    Plot included angles cutting directions adopting to 8 directions
+
+    param
+    -------
+    None
+
+    Returns
+    -------
+    None
+
+    """
+
+    def getAngle(x1, x2, y1, y2):
+        angle = np.arctan2(y2 - y1, x2 - x1)
+        if angle > (DIRECTIONS_MAP['8'][-1] + np.pi) / 2:
+            angle -= 2 * np.pi
+        return angle
+
+    def angleDist(ang1, ang2):
+        return 1 - (np.dot(ang1, ang2) / np.linalg.norm(ang1) /
+                    np.linalg.norm(ang2))
+
+    usr_angles = []
+    std_angles = []
+    for dir in os.listdir(BASE_DIR):
+        if not 'letter_' in dir or not os.path.isdir(
+                os.path.join(BASE_DIR, dir)):
+            continue
+        for t_l_i, t_l in enumerate(LETTER):
+            for rep in range(5):
+                try:
+                    path = np.load(
+                        os.path.join(BASE_DIR, dir, "%s_%d.npy" % (t_l, rep)))
+
+                    x, y, d = getAveragePath(path, align_to_first=False)
+                    corners = getCorners(path)
+                    directions_index, redundant_8directions, weights = get8Directions(
+                        path)
+                    identified_directions_index = []
+
+                    path_directions = [
+                        np.array([
+                            np.cos(EIGHT_DIRECTIONS[i]),
+                            np.sin(EIGHT_DIRECTIONS[i])
+                        ]) for i in redundant_8directions
+                    ]
+                    std_directions = [
+                        np.array([
+                            np.cos(EIGHT_DIRECTIONS[i]),
+                            np.sin(EIGHT_DIRECTIONS[i])
+                        ]) for i in DIRECTION_PATTERN8[t_l]
+                    ]
+                    paths = dtw_ndim.warping_path(path_directions,
+                                                  std_directions)
+                    idx = 0
+                    while idx < len(paths):
+                        match_list = []
+                        current_std_idx = paths[idx][1]
+                        while idx < len(
+                                paths) and paths[idx][1] == current_std_idx:
+                            match_list.append(paths[idx][0])
+                            idx += 1
+                        identified_directions_index.append(
+                            directions_index[match_list[np.argmin([
+                                angleDist(path_directions[m_l],
+                                          std_directions[current_std_idx])
+                                for m_l in match_list
+                            ])]])
+
+                    # plt.axis("scaled")
+                    # plt.xlim(10, 17)
+                    # plt.ylim(15, 25)
+                    # plt.scatter(x, y, c='blue')
+                    # for _, corner in enumerate(corners):
+                    #     plt.scatter([x[corner]], [y[corner]], c='red')
+                    #     plt.text(x[corner], y[corner], str(_))
+                    # for iu, iv in identified_directions_index:
+                    #     plt.plot([x[iu], x[iv]], [y[iu], y[iv]], c='green')
+                    # plt.show()
+
+                    std_angles_set = [
+                        EIGHT_DIRECTIONS[i] for i in DIRECTION_PATTERN8[t_l]
+                    ]
+                    if(len(std_angles_set)<2):
+                        continue
+                    for (usr, std) in list(zip(zip(identified_directions_index[1:],identified_directions_index[:-1]),zip(std_angles_set[1:],std_angles_set[:-1]))):
+                        def angleDiff(ang1,ang2):
+                            return 2 * np.pi - abs(ang1 -
+                               ang2) if abs(ang1 -
+                                            ang2) >= np.pi else abs(ang1 -
+                                                                    ang2)
+                        def included_angle(x1,y1,x2,y2):
+                            u=np.array([x1,y1])
+                            v=np.array([x2,y2])
+                            return np.arccos(np.dot(u,v)/np.linalg.norm(u)/np.linalg.norm(v))
+                        std_angles.append(angleDiff(std[0],std[1]))
+                        usr_angles.append(included_angle(x[usr[0][1]]-x[usr[0][0]], y[usr[0][1]]-y[usr[0][0]], x[usr[1][1]]-x[usr[1][0]], y[usr[1][1]]-y[usr[1][0]]))
+                except Exception as e:
+                    print(str(e))
+
+    df = pd.DataFrame({
+        'std_angle': std_angles,
+        'usr_angle': usr_angles
+    })
+    fig, axes = plt.subplots()
+    # sns.boxplot(x='std_angle', y='usr_angle', hue='order', data=df, ax=axes)
+    sns.boxplot(x='std_angle', y='usr_angle', data=df, ax=axes)
+    plt.show()
+    model = ols('usr_angle~C(std_angle)', data=df).fit()
+    anova_table = anova_lm(model, typ=2)
+    print(anova_table)
+    mc = MultiComparison(usr_angles, std_angles)
+    print(mc.tukeyhsd())
 
 def plotMultipleDirectionsCutToSingleAmplitude():
     """
@@ -1703,6 +1860,8 @@ def migrateSingleAndMultiple():
     avg_angles = []
     std_angles = []
     cat = []
+    usr_amp = []
+    usr_pres = []
     for dir in os.listdir(BASE_DIR):
         if not 'ch_data_' + '8' + '_dir_' in dir:
             continue
@@ -1730,6 +1889,8 @@ def migrateSingleAndMultiple():
 
                 avg_angles.append(angle)
                 std_angles.append(c)
+                usr_amp.append(np.linalg.norm((x[end]-x[start],y[end]-y[start])))
+                usr_pres.append(d[start:end])
                 cat.append('Single')
     for dir in os.listdir(BASE_DIR):
         if not 'letter_' in dir or not os.path.isdir(
@@ -1793,36 +1954,90 @@ def migrateSingleAndMultiple():
                     for ix, (iu, iv) in enumerate(identified_directions_index):
                         std_angles.append(std_angles_set[ix])
                         avg_angles.append(getAngle(x[iu], x[iv], y[iu], y[iv]))
+                        usr_amp.append(np.linalg.norm((x[iv]-x[iu],y[iv]-y[iu])))
+                        usr_pres.append(d[iu:iv])
                         cat.append('Multiple')
                 except Exception as e:
                     print(str(e))
 
-    for direction in EIGHT_DIRECTIONS:
-        _indexes = np.where(np.array(std_angles) == direction)[0]
-        _usr_angles = [avg_angles[idxx] for idxx in _indexes]
-        _cat = [cat[idxx] for idxx in _indexes]
-        print(direction)
-        df = pd.DataFrame({'usr_angle': _usr_angles, 'cat': _cat})
-        model = ols('usr_angle~C(cat)', data=df).fit()
-        anova_table = anova_lm(model, typ=2)
-        print(anova_table)
-        mc = MultiComparison(_usr_angles, _cat)
-        print(mc.tukeyhsd())
+    # # direction
+    # for direction in EIGHT_DIRECTIONS:
+    #     _indexes = np.where(np.array(std_angles) == direction)[0]
+    #     _usr_angles = [avg_angles[idxx] for idxx in _indexes]
+    #     _cat = [cat[idxx] for idxx in _indexes]
+    #     print(direction)
+    #     df = pd.DataFrame({'usr_angle': _usr_angles, 'cat': _cat})
+    #     model = ols('usr_angle~C(cat)', data=df).fit()
+    #     anova_table = anova_lm(model, typ=2)
+    #     print(anova_table)
+    #     mc = MultiComparison(_usr_angles, _cat)
+    #     print(mc.tukeyhsd())
 
-    df = pd.DataFrame({
-        'std_angle': std_angles,
-        'usr_angle': avg_angles,
-        'cat': cat
-    })
-    fig, axes = plt.subplots()
-    sns.boxplot(x='std_angle', y='usr_angle', hue='cat', data=df, ax=axes)
-    # sns.boxplot(x='std_angle', y='usr_angle', data=df, ax=axes)
+    # df = pd.DataFrame({
+    #     'std_angle': std_angles,
+    #     'usr_angle': avg_angles,
+    #     'cat': cat
+    # })
+    # fig, axes = plt.subplots()
+    # sns.boxplot(x='std_angle', y='usr_angle', hue='cat', data=df, ax=axes)
+    # # sns.boxplot(x='std_angle', y='usr_angle', data=df, ax=axes)
+    # plt.show()
+    # model = ols('usr_angle~C(std_angle)', data=df).fit()
+    # anova_table = anova_lm(model, typ=2)
+    # print(anova_table)
+    # mc = MultiComparison(avg_angles, std_angles)
+    # print(mc.tukeyhsd())
+
+    # # amplitude
+    # for direction in EIGHT_DIRECTIONS:
+    #     _indexes = np.where(np.array(std_angles) == direction)[0]
+    #     _usr_amp = [usr_amp[idxx] for idxx in _indexes]
+    #     _cat = [cat[idxx] for idxx in _indexes]
+    #     print(direction)
+    #     df = pd.DataFrame({'usr_amp': _usr_amp, 'cat': _cat})
+    #     model = ols('usr_amp~C(cat)', data=df).fit()
+    #     anova_table = anova_lm(model, typ=2)
+    #     print(anova_table)
+    #     mc = MultiComparison(_usr_amp, _cat)
+    #     print(mc.tukeyhsd())
+
+    # df = pd.DataFrame({
+    #     'std_angle': std_angles,
+    #     'usr_amp': usr_amp,
+    #     'cat': cat
+    # })
+    # fig, axes = plt.subplots()
+    # sns.boxplot(x='std_angle', y='usr_amp', hue='cat', data=df, ax=axes)
+    # plt.show()
+
+    # pressure
+    fig, axes=plt.subplots(2,4)
+    for ix, direction in enumerate(EIGHT_DIRECTIONS):
+        _indexes = np.where(np.array(std_angles) == direction)[0]
+        single_max, single_num=0,0
+        multiple_max,multiple_num=0,0
+        for idxx in _indexes:
+            if cat[idxx] == 'Single':
+                single_max=max(single_max,len(usr_pres[idxx]))
+                single_num+=1
+            else:
+                multiple_max=max(multiple_max,len(usr_pres[idxx]))
+                multiple_num+=1
+        single_arr = np.ma.empty((single_max,single_num))
+        single_arr.mask=True
+        multiple_arr = np.ma.empty((multiple_max,multiple_num))
+        multiple_arr.mask=True
+        single_i,multiple_i=0,0
+        for idxx in _indexes:
+            if cat[idxx] == 'Single':
+                single_arr[:len(usr_pres[idxx]),single_i]=np.array(usr_pres[idxx])
+                single_i+=1
+            else:
+                multiple_arr[:len(usr_pres[idxx]),multiple_i]=np.array(usr_pres[idxx])
+                multiple_i+=1
+        axes[ix // 4][ix % 4].scatter(list(range(single_max)),np.ma.mean(single_arr,axis=1),c='red')
+        axes[ix // 4][ix % 4].scatter(list(range(multiple_max)),np.ma.mean(multiple_arr,axis=1),c='blue')
     plt.show()
-    model = ols('usr_angle~C(std_angle)', data=df).fit()
-    anova_table = anova_lm(model, typ=2)
-    print(anova_table)
-    mc = MultiComparison(avg_angles, std_angles)
-    print(mc.tukeyhsd())
 
 
 def plotDoubleDirections():
@@ -2256,7 +2471,7 @@ def calPatternAcc8():
                 if i not in dist_min_indexes:
                     print(LETTER[i], j,
                           [LETTER[dmi] for dmi in dist_min_indexes])
-                    plotOneLettersCorner8(path)
+                    # plotOneLettersCorner8(path)
     print(total, top_1, top_1 / total)
 
 
@@ -2277,15 +2492,11 @@ if __name__ == '__main__':
         help='specify the directions you want to look into, default as 0')
     args = parser.parse_args()
 
-    gauss_dict = {}
-    with open('gauss_direction_mix.json', 'r') as file:
-        gauss_dict = json.load(file)
-
     # for duel in product(list(range(5)), list(range(5))):
     #     calCrossAcc(duel)
     # plotAllLettersCorner()
     # calPatternAcc()
-    calPatternAcc8()
+    # calPatternAcc8()
     # plot8Directions()
     # plot83Pressure()
     # plotDirections()
@@ -2296,6 +2507,7 @@ if __name__ == '__main__':
     # plotPressure()
     # plotDoubleDirectionsCutToSingle()
     # plotMultipleDirectionsCutToSingle()
+    # plotMultipleDirectionsCutToSingleIncludedAngles()
     # plotMultipleDirectionsCutToSingleAmplitude()
     # plotMultipleDirectionsCutToSinglePressure()
     # plotMultipleDirectionsCutToSinglePressureExtrema()
@@ -2303,4 +2515,4 @@ if __name__ == '__main__':
     # gaussianDirectionsMultiple()
     # visualizeGaussianDirections()
     # calSingleAcc()
-    # migrateSingleAndMultiple()
+    migrateSingleAndMultiple()
