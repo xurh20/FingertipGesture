@@ -66,20 +66,39 @@ class Example(QWidget):
 
     def drawTargets(self, qp: QPainter):
         center = (250, 250)
-        angles = [
-            (i - self.num_directions / 2) * np.pi / (self.num_directions / 2)
-            for i in range(self.num_directions)
-        ]
+        angles = [(i - self.num_directions / 2) * np.pi /
+                  (self.num_directions / 2) + np.pi / 2
+                  for i in range(self.num_directions)]
         r = 200
 
         for i, a in enumerate(angles):
             if i == self.target_direction:
+                qp.setPen(QPen(QColor(220, 20, 60), 10))
                 qp.setBrush(QColor(220, 20, 60))
             else:
+                qp.setPen(QPen(QColor(119, 136, 153), 10))
                 qp.setBrush(QColor(119, 136, 153))
-            qp.drawEllipse(
+            self.drawArrow(
+                qp, QPoint(center[0], center[1]),
                 QPoint(int(center[0] + r * np.cos(a)),
-                       int(center[1] - r * np.sin(a))), 30, 30)
+                       int(center[1] + r * np.sin(a))))
+
+    def drawArrow(self, qp: QPainter, start: QPoint, end: QPoint):
+        l = QLineF(start, end)
+        v = l.unitVector()
+        v.setLength(20)
+        v.translate(QPointF(l.dx(), l.dy()))
+
+        n = v.normalVector()
+        n.setLength(n.length() * 0.5)
+        n2 = n.normalVector().normalVector()
+
+        p1 = v.p2()
+        p2 = n.p2()
+        p3 = n2.p2()
+
+        qp.drawLine(l)
+        qp.drawPolygon(p1, p2, p3)
 
 
 class RecvThread(QThread):

@@ -114,6 +114,7 @@ allowed_coord = [
     np.array([1, -1]),
 ]
 
+
 def getAveragePath(path, align_to_first=True, integer=False):
     """
     description
@@ -321,33 +322,34 @@ def getCorners(path):
         ang1 = np.arctan2(u[1], u[0])
         ang2 = np.arctan2(v[1], v[0])
         return 2 * np.pi - abs(ang1 -
-                                ang2) if abs(ang1 -
+                               ang2) if abs(ang1 -
                                             ang2) >= np.pi else abs(ang1 -
                                                                     ang2)
 
     # smooth the path
-    x, y, d = getAveragePath(path,False)
+    x, y, d = getAveragePath(path, False)
     x = gaussian_filter1d(x, sigma=8)
     y = gaussian_filter1d(y, sigma=8)
     d = gaussian_filter1d(d, sigma=8)
 
     # collecting extrema points of pressure
-    d=np.array(d)
+    d = np.array(d)
     clamped_d = (d - np.min(d)) / (np.max(d) - np.min(d))
     pressure_persistence_pairs = sorted(
         [t for t in RunPersistence(clamped_d) if t[1] > 0.05],
         key=lambda x: x[0])
-    pre_collected_corners=[int(ppp[0]) for ppp in pressure_persistence_pairs]
+    pre_collected_corners = [int(ppp[0]) for ppp in pressure_persistence_pairs]
     if pre_collected_corners[0] - 0 > MERGE_THRESHOLD:
-        pre_collected_corners.insert(0,0)
+        pre_collected_corners.insert(0, 0)
     if len(x) - 1 - pre_collected_corners[-1] > MERGE_THRESHOLD:
         pre_collected_corners.append(len(x) - 1)
 
     # filter the turning points that seperates angles
     debug_dir = []
     debug_dir.append(pre_collected_corners[0])
-    for u,v in list(zip(pre_collected_corners[:-1],pre_collected_corners[1:])):
-        i = u+1
+    for u, v in list(zip(pre_collected_corners[:-1],
+                         pre_collected_corners[1:])):
+        i = u + 1
         while i < v:
             cur_v = (x[i] - x[i - 1], y[i] - y[i - 1])
             j = i
@@ -358,20 +360,23 @@ def getCorners(path):
                         (x[i] - x[i - 1], y[i] - y[i - 1])) < ANGLE_THRESHOLD:
                 cur_v = (x[j] - x[i - 1], y[j] - y[i - 1])
                 j += 1
-            debug_dir.append(j-1)
+            debug_dir.append(j - 1)
             i = j
 
     # merge redundant points caused by overreact
-    real_debug_dir=[]
+    real_debug_dir = []
     for dd in debug_dir:
-        if len(real_debug_dir)<=1:
+        if len(real_debug_dir) <= 1:
             real_debug_dir.append(dd)
             continue
-        if angleDiff((x[real_debug_dir[-1]]-x[real_debug_dir[-2]],y[real_debug_dir[-1]]-y[real_debug_dir[-2]]),(x[dd]-x[real_debug_dir[-1]],y[dd]-y[real_debug_dir[-1]])) <= ANGLE_THRESHOLD_2:
-            real_debug_dir[-1]=dd
+        if angleDiff((x[real_debug_dir[-1]] - x[real_debug_dir[-2]],
+                      y[real_debug_dir[-1]] - y[real_debug_dir[-2]]),
+                     (x[dd] - x[real_debug_dir[-1]],
+                      y[dd] - y[real_debug_dir[-1]])) <= ANGLE_THRESHOLD_2:
+            real_debug_dir[-1] = dd
         else:
             real_debug_dir.append(dd)
-    debug_dir=real_debug_dir
+    debug_dir = real_debug_dir
 
     # i = 1
     # while i < len(x):
@@ -915,6 +920,10 @@ def plotPressure():
     None
 
     """
+    max_p = []
+    avg_p = []
+    dir_p = []
+    exp_p = []
     for dir in os.listdir(BASE_DIR):
         if not 'ch_data_8_dir_' in dir:
             continue
@@ -954,9 +963,41 @@ def plotPressure():
                 #     plt.scatter([x[start], x[end]], [y[start], y[end]],
                 #                 c='red')
                 #     plt.show()
-                plt.scatter([list(range(end - start + 1))], [d[start:end + 1]],
+                clamp_d = (d - np.min(d)) / (np.max(d) - np.min(d))
+                plt.scatter([list(range(end - start + 1))],
+                            [clamp_d[start:end + 1]],
                             c=COLORS[i])
+                max_p.append(np.max(d))
+                avg_p.append(np.average(d))
+                dir_p.append(i)
+                exp_p.append(dir)
     plt.show()
+
+    df = pd.DataFrame({
+        'max_pressure': max_p,
+        'average_pressure': avg_p,
+        'direction': dir_p,
+        'experiment': exp_p
+    })
+    fig, axes = plt.subplots()
+    sns.boxplot(x='direction',
+                y='max_pressure',
+                hue='experiment',
+                data=df,
+                ax=axes)
+    plt.show()
+    fig, axes = plt.subplots()
+    sns.boxplot(x='direction',
+                y='average_pressure',
+                hue='experiment',
+                data=df,
+                ax=axes)
+    plt.show()
+    # model = ols('usr_angle~C(std_angle)', data=df).fit()
+    # anova_table = anova_lm(model, typ=2)
+    # print(anova_table)
+    # mc = MultiComparison(avg_angles, std_angles)
+    # print(mc.tukeyhsd())
 
 
 def anovaDirections():
@@ -1428,6 +1469,7 @@ def plotMultipleDirectionsCutToSingle():
     mc = MultiComparison(avg_angles, std_angles)
     print(mc.tukeyhsd())
 
+
 def plotMultipleDirectionsCutToSingleIncludedAngles():
     """
     description
@@ -1515,27 +1557,35 @@ def plotMultipleDirectionsCutToSingleIncludedAngles():
                     std_angles_set = [
                         EIGHT_DIRECTIONS[i] for i in DIRECTION_PATTERN8[t_l]
                     ]
-                    if(len(std_angles_set)<2):
+                    if (len(std_angles_set) < 2):
                         continue
-                    for (usr, std) in list(zip(zip(identified_directions_index[1:],identified_directions_index[:-1]),zip(std_angles_set[1:],std_angles_set[:-1]))):
-                        def angleDiff(ang1,ang2):
-                            return 2 * np.pi - abs(ang1 -
-                               ang2) if abs(ang1 -
-                                            ang2) >= np.pi else abs(ang1 -
-                                                                    ang2)
-                        def included_angle(x1,y1,x2,y2):
-                            u=np.array([x1,y1])
-                            v=np.array([x2,y2])
-                            return np.arccos(np.dot(u,v)/np.linalg.norm(u)/np.linalg.norm(v))
-                        std_angles.append(angleDiff(std[0],std[1]))
-                        usr_angles.append(included_angle(x[usr[0][1]]-x[usr[0][0]], y[usr[0][1]]-y[usr[0][0]], x[usr[1][1]]-x[usr[1][0]], y[usr[1][1]]-y[usr[1][0]]))
+                    for (usr, std) in list(
+                            zip(
+                                zip(identified_directions_index[1:],
+                                    identified_directions_index[:-1]),
+                                zip(std_angles_set[1:], std_angles_set[:-1]))):
+
+                        def angleDiff(ang1, ang2):
+                            return 2 * np.pi - abs(ang1 - ang2) if abs(
+                                ang1 - ang2) >= np.pi else abs(ang1 - ang2)
+
+                        def included_angle(x1, y1, x2, y2):
+                            u = np.array([x1, y1])
+                            v = np.array([x2, y2])
+                            return np.arccos(
+                                np.dot(u, v) / np.linalg.norm(u) /
+                                np.linalg.norm(v))
+
+                        std_angles.append(angleDiff(std[0], std[1]))
+                        usr_angles.append(
+                            included_angle(x[usr[0][1]] - x[usr[0][0]],
+                                           y[usr[0][1]] - y[usr[0][0]],
+                                           x[usr[1][1]] - x[usr[1][0]],
+                                           y[usr[1][1]] - y[usr[1][0]]))
                 except Exception as e:
                     print(str(e))
 
-    df = pd.DataFrame({
-        'std_angle': std_angles,
-        'usr_angle': usr_angles
-    })
+    df = pd.DataFrame({'std_angle': std_angles, 'usr_angle': usr_angles})
     fig, axes = plt.subplots()
     # sns.boxplot(x='std_angle', y='usr_angle', hue='order', data=df, ax=axes)
     sns.boxplot(x='std_angle', y='usr_angle', data=df, ax=axes)
@@ -1545,6 +1595,7 @@ def plotMultipleDirectionsCutToSingleIncludedAngles():
     print(anova_table)
     mc = MultiComparison(usr_angles, std_angles)
     print(mc.tukeyhsd())
+
 
 def plotMultipleDirectionsCutToSingleAmplitude():
     """
@@ -1660,7 +1711,9 @@ def plotMultipleDirectionsCutToSinglePressure():
     # plt.axis("scaled")
     # plt.xlim(10, 17)
     # plt.ylim(15, 25)
-    fig, axes = plt.subplots(5, 5)
+    pressure_dict = [[[[] for ___ in range(8)] for _ in range(5)]
+                     for __ in range(5)]
+
     for dir in os.listdir(BASE_DIR):
         if not 'letter_' in dir or not os.path.isdir(
                 os.path.join(BASE_DIR, dir)):
@@ -1711,12 +1764,23 @@ def plotMultipleDirectionsCutToSinglePressure():
                     # plt.ylim(15, 25)
                     for ix, (iu, iv) in enumerate(identified_directions_index):
                         pressure_list = d[iu:iv]
-                        axes[len(std_directions) - 1][ix].plot(
-                            list(range(len(pressure_list))),
-                            pressure_list,
-                            c=COLORS[DIRECTION_PATTERN8[t_l][ix]])
+                        pressure_dict[len(std_directions) - 1][ix][
+                            DIRECTION_PATTERN8[t_l][ix]].append(pressure_list)
                 except Exception as e:
                     print(str(e))
+
+    # plot for every direction
+    fig, axes = plt.subplots(5, 5)
+    for total_stroke_num in range(5):
+        for stroke_idx in range(5):
+            for stroke_dir in range(8):
+                pressure_list = pressure_dict[total_stroke_num][stroke_idx][
+                    stroke_dir]
+                if len(pressure_list) <= 0:
+                    continue
+                for p_l in pressure_list:
+                    axes[total_stroke_num][stroke_idx].plot(
+                        list(range(len(p_l))), p_l, c=COLORS[stroke_dir])
     plt.show()
 
 
@@ -1862,6 +1926,9 @@ def migrateSingleAndMultiple():
     cat = []
     usr_amp = []
     usr_pres = []
+    max_p = []
+    avg_p = []
+    dir_p = []
     for dir in os.listdir(BASE_DIR):
         if not 'ch_data_' + '8' + '_dir_' in dir:
             continue
@@ -1889,8 +1956,12 @@ def migrateSingleAndMultiple():
 
                 avg_angles.append(angle)
                 std_angles.append(c)
-                usr_amp.append(np.linalg.norm((x[end]-x[start],y[end]-y[start])))
+                usr_amp.append(
+                    np.linalg.norm((x[end] - x[start], y[end] - y[start])))
                 usr_pres.append(d[start:end])
+                max_p.append(np.max(d[start:end]))
+                avg_p.append(np.average(d[start:end]))
+                dir_p.append(i)
                 cat.append('Single')
     for dir in os.listdir(BASE_DIR):
         if not 'letter_' in dir or not os.path.isdir(
@@ -1954,8 +2025,12 @@ def migrateSingleAndMultiple():
                     for ix, (iu, iv) in enumerate(identified_directions_index):
                         std_angles.append(std_angles_set[ix])
                         avg_angles.append(getAngle(x[iu], x[iv], y[iu], y[iv]))
-                        usr_amp.append(np.linalg.norm((x[iv]-x[iu],y[iv]-y[iu])))
+                        usr_amp.append(
+                            np.linalg.norm((x[iv] - x[iu], y[iv] - y[iu])))
                         usr_pres.append(d[iu:iv])
+                        max_p.append(np.max(d[iu:iv]))
+                        avg_p.append(np.average(d[iu:iv]))
+                        dir_p.append(DIRECTION_PATTERN8[t_l][ix])
                         cat.append('Multiple')
                 except Exception as e:
                     print(str(e))
@@ -2001,42 +2076,74 @@ def migrateSingleAndMultiple():
     #     mc = MultiComparison(_usr_amp, _cat)
     #     print(mc.tukeyhsd())
 
-    # df = pd.DataFrame({
-    #     'std_angle': std_angles,
-    #     'usr_amp': usr_amp,
-    #     'cat': cat
-    # })
-    # fig, axes = plt.subplots()
-    # sns.boxplot(x='std_angle', y='usr_amp', hue='cat', data=df, ax=axes)
-    # plt.show()
+    for i, usr_a in enumerate(usr_amp):
+        plt.scatter([usr_a * np.cos(avg_angles[i])],
+                    [usr_a * np.sin(avg_angles[i])],
+                    c=COLORS[dir_p[i]],
+                    alpha=0.3 if cat[i] == 'Single' else 0.7)
+    plt.show()
+
+    df = pd.DataFrame({
+        'std_angle': std_angles,
+        'usr_amp': usr_amp,
+        'cat': cat
+    })
+    fig, axes = plt.subplots()
+    sns.boxplot(x='std_angle', y='usr_amp', hue='cat', data=df, ax=axes)
+    plt.show()
 
     # pressure
-    fig, axes=plt.subplots(2,4)
-    for ix, direction in enumerate(EIGHT_DIRECTIONS):
-        _indexes = np.where(np.array(std_angles) == direction)[0]
-        single_max, single_num=0,0
-        multiple_max,multiple_num=0,0
-        for idxx in _indexes:
-            if cat[idxx] == 'Single':
-                single_max=max(single_max,len(usr_pres[idxx]))
-                single_num+=1
-            else:
-                multiple_max=max(multiple_max,len(usr_pres[idxx]))
-                multiple_num+=1
-        single_arr = np.ma.empty((single_max,single_num))
-        single_arr.mask=True
-        multiple_arr = np.ma.empty((multiple_max,multiple_num))
-        multiple_arr.mask=True
-        single_i,multiple_i=0,0
-        for idxx in _indexes:
-            if cat[idxx] == 'Single':
-                single_arr[:len(usr_pres[idxx]),single_i]=np.array(usr_pres[idxx])
-                single_i+=1
-            else:
-                multiple_arr[:len(usr_pres[idxx]),multiple_i]=np.array(usr_pres[idxx])
-                multiple_i+=1
-        axes[ix // 4][ix % 4].scatter(list(range(single_max)),np.ma.mean(single_arr,axis=1),c='red')
-        axes[ix // 4][ix % 4].scatter(list(range(multiple_max)),np.ma.mean(multiple_arr,axis=1),c='blue')
+    # fig, axes = plt.subplots(2, 4)
+    # for ix, direction in enumerate(EIGHT_DIRECTIONS):
+    #     _indexes = np.where(np.array(std_angles) == direction)[0]
+    #     single_max, single_num = 0, 0
+    #     multiple_max, multiple_num = 0, 0
+    #     for idxx in _indexes:
+    #         if cat[idxx] == 'Single':
+    #             single_max = max(single_max, len(usr_pres[idxx]))
+    #             single_num += 1
+    #         else:
+    #             multiple_max = max(multiple_max, len(usr_pres[idxx]))
+    #             multiple_num += 1
+    #     single_arr = np.ma.empty((single_max, single_num))
+    #     single_arr.mask = True
+    #     multiple_arr = np.ma.empty((multiple_max, multiple_num))
+    #     multiple_arr.mask = True
+    #     single_i, multiple_i = 0, 0
+    #     for idxx in _indexes:
+    #         if cat[idxx] == 'Single':
+    #             single_arr[:len(usr_pres[idxx]),
+    #                        single_i] = np.array(usr_pres[idxx])
+    #             single_i += 1
+    #         else:
+    #             multiple_arr[:len(usr_pres[idxx]),
+    #                          multiple_i] = np.array(usr_pres[idxx])
+    #             multiple_i += 1
+    #     axes[ix // 4][ix % 4].scatter(list(range(single_max)),
+    #                                   np.ma.mean(single_arr, axis=1),
+    #                                   c='red')
+    #     axes[ix // 4][ix % 4].scatter(list(range(multiple_max)),
+    #                                   np.ma.mean(multiple_arr, axis=1),
+    #                                   c='blue')
+    df = pd.DataFrame({
+        'max_pressure': max_p,
+        'average_pressure': avg_p,
+        'direction': dir_p,
+        'category': cat
+    })
+    fig, axes = plt.subplots()
+    sns.boxplot(x='direction',
+                y='max_pressure',
+                hue='category',
+                data=df,
+                ax=axes)
+    plt.show()
+    fig, axes = plt.subplots()
+    sns.boxplot(x='direction',
+                y='average_pressure',
+                hue='category',
+                data=df,
+                ax=axes)
     plt.show()
 
 

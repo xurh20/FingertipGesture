@@ -92,20 +92,32 @@ if __name__ == '__main__':
     parser.add_argument(
         '-d',
         '--direction',
-        default=8,
+        default='8',
         help='specify the directions you want to record, default as 8')
-
+    parser.add_argument(
+        '-n',
+        '--name',
+        default='test',
+        help='specify the name of participant, default as "test"')
     args = parser.parse_args()
 
-    idx = 0
-    while True:
-        save_dir = "new_data/ch_data_" + str(
-            args.direction) + '_dir_' + str(idx)
-
+    if args.name == 'test':
+        save_dir = "study1/test"
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
-            break
-        idx += 1
+    else:
+        idx = 0
+        while True:
+            save_dir = "study1/%s/%d" % (args.name, idx)
+
+            if not os.path.exists(save_dir):
+                os.mkdir(save_dir)
+                break
+            idx += 1
+
+    save_dir += "/%s" % args.direction
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
 
     handle = open_sensel()
     if handle:
@@ -120,10 +132,12 @@ if __name__ == '__main__':
         s.bind(('localhost', 34827))
 
         s.sendto(repr(int(args.direction)).encode('gbk'), ('localhost', 34826))
-        candidates = list(
-            itertools.product(list(range(int(args.direction))),
-                              list(range(5))))
-        random.shuffle(candidates)
+        candidates = []
+        for rpt in range(5):
+            s_candidates = list(
+                itertools.product(list(range(int(args.direction))), [rpt]))
+            random.shuffle(s_candidates)
+            candidates.extend(s_candidates)
         candidate_index = 0
         current_record_num = candidates[candidate_index][1]
         while True:
