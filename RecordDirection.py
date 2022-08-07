@@ -99,6 +99,10 @@ if __name__ == '__main__':
         '--name',
         default='test',
         help='specify the name of participant, default as "test"')
+    parser.add_argument('-i',
+                        '--index',
+                        default='-1',
+                        help='specify the index of participant, default as -1')
     args = parser.parse_args()
 
     if args.name == 'test':
@@ -106,14 +110,14 @@ if __name__ == '__main__':
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
     else:
-        idx = 0
-        while True:
-            save_dir = "study1/%s/%d" % (args.name, idx)
+        save_base_dir = "study1/%s" % args.name
+        if not os.path.exists(save_base_dir):
+            os.mkdir(save_base_dir)
 
-            if not os.path.exists(save_dir):
-                os.mkdir(save_dir)
-                break
-            idx += 1
+        save_dir = save_base_dir + "/%s" % (args.index)
+
+        if not os.path.exists(save_dir):
+            os.mkdir(save_dir)
 
     save_dir += "/%s" % args.direction
     if not os.path.exists(save_dir):
