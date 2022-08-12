@@ -115,7 +115,7 @@ allowed_coord = [
 ]
 
 
-def getAveragePath(path, align_to_first=True, integer=False):
+def getAveragePath(path, align_to_first=True, integer=False, truncate=True):
     """
     description
     ---------
@@ -178,52 +178,54 @@ def getAveragePath(path, align_to_first=True, integer=False):
     # while i < len(depths) and depths[i] >= last_extrema * 0.7:
     #     i += 1
     # trunc_at_end = i
-    d = np.array(depths)
-    clamped_d = (d - np.min(d)) / (np.max(d) - np.min(d))
-    pressure_persistence_pairs = sorted(
-        [t for t in RunPersistence(clamped_d) if t[1] > 0.05],
-        key=lambda x: x[0])
-    if len(pressure_persistence_pairs) <= 2:
-        i = 1
-        while i < len(depths) and depths[i] > depths[i - 1]:
-            i += 1
-        first_extrema = depths[i]
-        while i >= 0 and depths[i] >= first_extrema * 0.3:
-            i -= 1
-        trunc_at_start = i
-        i = len(depths) - 1
-        while i > 1 and depths[i - 1] > depths[i]:
-            i -= 1
-        last_extrema = depths[i]
-        while i < len(depths) and depths[i] >= last_extrema * 0.7:
-            i += 1
-        trunc_at_end = i
-    elif len(pressure_persistence_pairs) == 3:
-        smallest_extrema = depths[pressure_persistence_pairs[1][0]]
-        i = 1
-        while i < len(depths) and depths[i] < smallest_extrema * 0.3:
-            i += 1
-        trunc_at_start = i
-        i = len(depths) - 1
-        while i > trunc_at_start and depths[i] < smallest_extrema * 0.3:
-            i -= 1
-        trunc_at_end = i
-    else:
-        ppp = pressure_persistence_pairs[1:-1]
-        smallest_extrema = np.min([depths[_[0]] for _ in ppp])
-        i = 1
-        while i < len(depths) and depths[i] < smallest_extrema * 0.6:
-            i += 1
-        trunc_at_start = i
-        i = len(depths) - 1
-        while i > trunc_at_start and depths[i] < smallest_extrema:
-            i -= 1
-        trunc_at_end = i
-    if len(points_x[trunc_at_start:trunc_at_end]) <= 0:
-        logging.warning('Empty path extracted!')
-    return np.array(points_x[trunc_at_start:trunc_at_end]), np.array(
-        points_y[trunc_at_start:trunc_at_end]), np.array(
-            depths[trunc_at_start:trunc_at_end])
+    if truncate:
+        d = np.array(depths)
+        clamped_d = (d - np.min(d)) / (np.max(d) - np.min(d))
+        pressure_persistence_pairs = sorted(
+            [t for t in RunPersistence(clamped_d) if t[1] > 0.05],
+            key=lambda x: x[0])
+        if len(pressure_persistence_pairs) <= 2:
+            i = 1
+            while i < len(depths) and depths[i] > depths[i - 1]:
+                i += 1
+            first_extrema = depths[i]
+            while i >= 0 and depths[i] >= first_extrema * 0.3:
+                i -= 1
+            trunc_at_start = i
+            i = len(depths) - 1
+            while i > 1 and depths[i - 1] > depths[i]:
+                i -= 1
+            last_extrema = depths[i]
+            while i < len(depths) and depths[i] >= last_extrema * 0.7:
+                i += 1
+            trunc_at_end = i
+        elif len(pressure_persistence_pairs) == 3:
+            smallest_extrema = depths[pressure_persistence_pairs[1][0]]
+            i = 1
+            while i < len(depths) and depths[i] < smallest_extrema * 0.3:
+                i += 1
+            trunc_at_start = i
+            i = len(depths) - 1
+            while i > trunc_at_start and depths[i] < smallest_extrema * 0.3:
+                i -= 1
+            trunc_at_end = i
+        else:
+            ppp = pressure_persistence_pairs[1:-1]
+            smallest_extrema = np.min([depths[_[0]] for _ in ppp])
+            i = 1
+            while i < len(depths) and depths[i] < smallest_extrema * 0.6:
+                i += 1
+            trunc_at_start = i
+            i = len(depths) - 1
+            while i > trunc_at_start and depths[i] < smallest_extrema:
+                i -= 1
+            trunc_at_end = i
+        if len(points_x[trunc_at_start:trunc_at_end]) <= 0:
+            logging.warning('Empty path extracted!')
+        return np.array(points_x[trunc_at_start:trunc_at_end]), np.array(
+            points_y[trunc_at_start:trunc_at_end]), np.array(
+                depths[trunc_at_start:trunc_at_end])
+    return np.array(points_x), np.array(points_y), np.array(depths)
 
 
 def getXYExtrema(path):
@@ -842,12 +844,11 @@ def plotDirections():
     sns.boxplot(x='std_angle', y='usr_angle', data=df, ax=axes)
     plt.show()
 
-
-def plotAmplitude():
+def plotElapsed():
     """
     description
     ---------
-    Plot amplitude of 8 directions
+    Plot elapsed time of given directions
 
     param
     -------
@@ -858,13 +859,59 @@ def plotAmplitude():
     None
 
     """
-    plt.axis("scaled")
-    plt.xlim(-10, 10)
-    plt.ylim(-10, 10)
+    num_d = int(args.direction)
+    fig = plt.figure(figsize=(8,6),dpi=100)
+    ax = plt.subplot(111, polar=True)
+    angles = DIRECTIONS_MAP[args.direction]
+    angles = np.concatenate((angles,[angles[0]]))
     for dir in os.listdir(BASE_DIR):
-        if not 'ch_data_8_dir_' in dir:
+        elapsed = [[] for _ in range(num_d)]
+        if not 'ch_data_' + args.direction + '_dir_' in dir:
             continue
-        for i, c in enumerate(DIRECTIONS_MAP['8']):
+        for i, c in enumerate(DIRECTIONS_MAP[args.direction]):
+            for j in range(5):
+                try:
+                    path = np.load(
+                        os.path.join(BASE_DIR, dir,
+                                     str(i) + '_{}.npy'.format(j)))
+                    x, y, d = getAveragePath(path,
+                                             align_to_first=False,
+                                             integer=False,
+                                             truncate=False)
+                except:
+                    continue
+                
+                elapsed[i].append(len(x))
+        print(elapsed)
+        avg_ela = []
+        for i in range(num_d):
+            avg_ela.append(np.average(elapsed[i]))
+        avg_ela = np.concatenate((avg_ela, [avg_ela[0]]))
+        ax.plot(angles, avg_ela)
+        ax.set_theta_zero_location('E')
+    plt.show()
+
+def plotTendency():
+    """
+    description
+    ---------
+    Plot tendency preference of given directions
+
+    param
+    -------
+    None
+
+    Returns
+    -------
+    None
+
+    """
+    num_d = int(args.direction)
+    fig, ax = plt.subplots(2,4)
+    for dir in os.listdir(BASE_DIR):
+        if not 'ch_data_' + args.direction + '_dir_' in dir:
+            continue
+        for i, c in enumerate(DIRECTIONS_MAP[args.direction]):
             for j in range(5):
                 try:
                     path = np.load(
@@ -900,16 +947,15 @@ def plotAmplitude():
                 #     plt.scatter([x[start], x[end]], [y[start], y[end]],
                 #                 c='red')
                 #     plt.show()
-                plt.scatter([x[end] - x[start]], [y[end] - y[start]],
+                ax[i // 4][i % 4].scatter(np.array(x[start:end])-x[start], np.array(y[start:end])-y[start],
                             c=COLORS[i])
     plt.show()
 
-
-def plotPressure():
+def plotAmplitude():
     """
     description
     ---------
-    Plot pressure of 8 directions
+    Plot amplitude of given directions
 
     param
     -------
@@ -920,14 +966,94 @@ def plotPressure():
     None
 
     """
+    num_d = int(args.direction)
+    fig = plt.figure(figsize=(8,6),dpi=100)
+    ax = plt.subplot(111, polar=True)
+    angles = DIRECTIONS_MAP[args.direction]
+    angles = np.concatenate((angles,[angles[0]]))
+    for dir in os.listdir(BASE_DIR):
+        amplitude = [[] for _ in range(num_d)]
+        if not 'ch_data_' + args.direction + '_dir_' in dir:
+            continue
+        for i, c in enumerate(DIRECTIONS_MAP[args.direction]):
+            for j in range(5):
+                try:
+                    path = np.load(
+                        os.path.join(BASE_DIR, dir,
+                                     str(i) + '_{}.npy'.format(j)))
+                    x, y, d = getAveragePath(path,
+                                             align_to_first=False,
+                                             integer=False)
+                    x = gaussian_filter1d(x, sigma=5)
+                    y = gaussian_filter1d(y, sigma=5)
+                    start, end = getLongestDirection(path)
+                    # start, end = getStartAndEnd(args.direction, x, y, i)
+                except:
+                    continue
+                if end < 0:
+                    continue
+                angle = np.arctan2(y[end] - y[start], x[end] - x[start])
+                # if angle > (DIRECTIONS_MAP[args.direction][-1] + np.pi) / 2:
+                if i == 0 and angle > 0:
+                    angle -= 2 * np.pi
+                # plt.axis("scaled")
+                # plt.scatter([np.cos(angle)], [np.sin(angle)], c=COLORS[i])
+
+                # if i == 0:
+                #     print(
+                #         os.path.join(BASE_DIR, dir,
+                #                      str(i) + '_{}.npy'.format(j)))
+                #     print(c, angle)
+                #     plt.axis("scaled")
+                #     plt.xlim(10, 17)
+                #     plt.ylim(15, 25)
+                #     plt.scatter(x, y, c='blue')
+                #     plt.scatter([x[start], x[end]], [y[start], y[end]],
+                #                 c='red')
+                #     plt.show()
+                # plt.scatter([x[end] - x[start]], [y[end] - y[start]],
+                #             c=COLORS[i])
+                amplitude[i].append(np.sqrt((x[end] - x[start])**2+(y[end] - y[start])**2))
+        avg_amp = []
+        for i in range(num_d):
+            avg_amp.append(np.average(amplitude[i]))
+        avg_amp = np.concatenate((avg_amp, [avg_amp[0]]))
+        ax.plot(angles, avg_amp)
+        ax.set_theta_zero_location('W')
+    plt.show()
+
+
+def plotPressure():
+    """
+    description
+    ---------
+    Plot pressure of given directions
+
+    param
+    -------
+    None
+
+    Returns
+    -------
+    None
+
+    """
+    num_d = int(args.direction)
+    fig = plt.figure(figsize=(8,6),dpi=100)
+    ax1 = plt.subplot(121, polar=True)
+    ax2 = plt.subplot(122, polar=True)
+    angles = DIRECTIONS_MAP[args.direction]
+    angles = np.concatenate((angles,[angles[0]]))
     max_p = []
     avg_p = []
     dir_p = []
     exp_p = []
     for dir in os.listdir(BASE_DIR):
-        if not 'ch_data_8_dir_' in dir:
+        pressure_m = [[] for _ in range(num_d)]
+        pressure_a = [[] for _ in range(num_d)]
+        if not 'ch_data_' + args.direction + '_dir_' in dir:
             continue
-        for i, c in enumerate(DIRECTIONS_MAP['8']):
+        for i, c in enumerate(DIRECTIONS_MAP[args.direction]):
             for j in range(5):
                 try:
                     path = np.load(
@@ -971,6 +1097,18 @@ def plotPressure():
                 avg_p.append(np.average(d))
                 dir_p.append(i)
                 exp_p.append(dir)
+                pressure_m[i].append(np.max(d))
+                pressure_a[i].append(np.average(d))
+        pma, paa = [], []
+        for i in range(num_d):
+            pma.append(np.average(pressure_m[i]))
+            paa.append(np.average(pressure_a[i]))
+        pma = np.concatenate((pma, [pma[0]]))
+        paa = np.concatenate((paa, [paa[0]]))
+        ax1.plot(angles, pma)
+        ax2.plot(angles, paa)
+        ax1.set_theta_zero_location('E')
+        ax2.set_theta_zero_location('E')
     plt.show()
 
     df = pd.DataFrame({
@@ -2590,12 +2728,12 @@ if __name__ == '__main__':
     parser.add_argument(
         '-i',
         '--index',
-        default=0,
+        default='0',
         help='specify the index you want to look into, default as 0')
     parser.add_argument(
         '-d',
         '--direction',
-        default=0,
+        default='0',
         help='specify the directions you want to look into, default as 0')
     args = parser.parse_args()
 
@@ -2610,6 +2748,8 @@ if __name__ == '__main__':
     # anovaDirections()
     # plotStartDiff()
     # plotDoubleDirections()
+    # plotElapsed()
+    plotTendency()
     # plotAmplitude()
     # plotPressure()
     # plotDoubleDirectionsCutToSingle()
@@ -2622,4 +2762,4 @@ if __name__ == '__main__':
     # gaussianDirectionsMultiple()
     # visualizeGaussianDirections()
     # calSingleAcc()
-    migrateSingleAndMultiple()
+    # migrateSingleAndMultiple()
